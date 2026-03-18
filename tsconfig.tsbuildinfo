@@ -1,0 +1,1 @@
+{"root":["./packages/cli/src/index.ts","./packages/core/src/index.ts","./packages/reconciler/src/index.ts","./packages/sdk/src/index.ts","./apps/dashboard/next-env.d.ts","./apps/dashboard/next.config.ts","./apps/dashboard/app/jsx.d.ts","./apps/orchestrator/src/index.ts","./apps/dashboard/app/layout.tsx","./apps/dashboard/app/page.tsx"],"version":"5.9.3"}
