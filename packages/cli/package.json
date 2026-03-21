@@ -4,5 +4,24 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "types": "src/index.ts"
+  "types": "src/index.ts",
+  "bin": {
+    "flowdb": "./bin/flowdb.js"
+  },
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@flowdb/core": "0.1.0",
+    "@flowdb/reconciler": "0.1.0",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "ora": "^8.2.0",
+    "pg": "^8.13.3",
+    "tsx": "^4.20.3"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.24.0",
+    "vitest": "^3.1.1"
+  }
 }
