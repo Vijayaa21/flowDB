@@ -2,12 +2,25 @@ import { Client } from "pg";
 
 import { parseMigrations, reconcile } from "@flowdb/reconciler";
 
+export type MigrationConflict = {
+  table: string;
+  column: string;
+};
+
+export type MigrationRunReport = {
+  applied: string[];
+  pending: string[];
+  schemaDiffSummary: string;
+  conflicts: MigrationConflict[];
+};
+
 export async function runPendingMigrations(
   projectRoot: string,
   branchDatabaseUrl: string
-): Promise<{ applied: string[] }> {
+): Promise<MigrationRunReport> {
   const migrations = await parseMigrations(projectRoot);
-  const ordered = reconcile(migrations, []).order;
+  const reconciliation = reconcile(migrations, []);
+  const ordered = reconciliation.order;
 
   const client = new Client({ connectionString: branchDatabaseUrl });
   await client.connect();
@@ -27,6 +40,7 @@ export async function runPendingMigrations(
     const appliedIds = new Set(existing.rows.map((row) => row.id));
 
     const pending = ordered.filter((migration) => !appliedIds.has(migration.id));
+    const pendingNames = pending.map((migration) => migration.filename);
     const applied: string[] = [];
 
     for (const migration of pending) {
@@ -45,7 +59,15 @@ export async function runPendingMigrations(
       }
     }
 
-    return { applied };
+    return {
+      applied,
+      pending: pendingNames,
+      schemaDiffSummary: `Applied ${applied.length} of ${pendingNames.length} pending migration(s).`,
+      conflicts: reconciliation.conflicts.map((conflict) => ({
+        table: conflict.table,
+        column: conflict.column
+      }))
+    };
   } finally {
     await client.end();
   }

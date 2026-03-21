@@ -1,0 +1,9 @@
+{
+  "name": "FlowDB",
+  "description": "Git-native database branching integration for preview and branch environments.",
+  "scopes": [
+    "env:read",
+    "env:write"
+  ],
+  "redirectUrl": "https://flowdb.dev/integrations/vercel/callback"
+}

@@ -11,7 +11,15 @@ export const githubPullRequestSchema = z.object({
 });
 
 export const githubPushSchema = z.object({
-  ref: z.string().min(1)
+  ref: z.string().min(1),
+  repository: z
+    .object({
+      name: z.string().min(1),
+      owner: z.object({
+        login: z.string().min(1)
+      })
+    })
+    .optional()
 });
 
 export const vercelWebhookSchema = z.object({
