@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import type { BranchApiResponse, BranchRecord, BranchStatus } from "@/lib/types";
+import type { BranchApiResponse, BranchRecord } from "@/lib/types";
 import { useBranches, useReseedDemoBranches, useSeedBranch, useTeardownBranch } from "@/lib/queries";
 import { inferMigrationCount, inferStorageSize } from "@/lib/view-model";
 

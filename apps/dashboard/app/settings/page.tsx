@@ -8,7 +8,13 @@ import { ORCHESTRATOR_URL } from "@/lib/config";
 type DashboardConfig = {
   ORCHESTRATOR_URL?: string;
   GITHUB_APP_ID?: string;
+  GITHUB_WEBHOOK_SECRET?: string;
+  VERCEL_API_TOKEN?: string;
   VERCEL_TOKEN?: string;
+  FORK_TIMEOUT_MS?: number;
+  MAX_CONCURRENT_BRANCHES?: number;
+  AUTO_TEARDOWN_DAYS?: number;
+  PG_POOL_SIZE?: number;
 };
 
 async function loadConfig(): Promise<DashboardConfig> {
@@ -35,8 +41,13 @@ export default async function SettingsPage() {
       <SettingsForm
         defaultValues={{
           orchestratorUrl: config.ORCHESTRATOR_URL ?? ORCHESTRATOR_URL,
-          githubAppId: config.GITHUB_APP_ID ?? "",
-          vercelToken: config.VERCEL_TOKEN ?? ""
+          githubAppId: Number(config.GITHUB_APP_ID ?? 0),
+          githubWebhookSecret: config.GITHUB_WEBHOOK_SECRET ?? "",
+          vercelApiToken: config.VERCEL_API_TOKEN ?? config.VERCEL_TOKEN ?? "",
+          forkTimeoutMs: config.FORK_TIMEOUT_MS ?? 500,
+          maxConcurrentBranches: config.MAX_CONCURRENT_BRANCHES ?? 10,
+          autoTeardownDays: config.AUTO_TEARDOWN_DAYS ?? 7,
+          pgPoolSize: config.PG_POOL_SIZE ?? 5
         }}
       />
     </div>
