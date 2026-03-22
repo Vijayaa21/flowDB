@@ -16,6 +16,9 @@ const config: Config = {
         "card-foreground": "hsl(var(--card-foreground))",
         "muted-foreground": "hsl(var(--muted-foreground))",
         destructive: "rgb(225 29 72)"
+      },
+      animation: {
+        "pulse-dot": "pulse-dot 1.5s ease-in-out infinite"
       }
     }
   },

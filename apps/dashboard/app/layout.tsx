@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
 
 import { AppShell } from "@/components/app-shell";
 import { QueryProvider } from "@/components/query-provider";
 
 import "./globals.css";
 
-const headingFont = Space_Grotesk({
+const bodyFont = Inter({
   subsets: ["latin"],
-  variable: "--font-heading"
+  variable: "--font-body"
 });
 
 const monoFont = IBM_Plex_Mono({
@@ -29,7 +29,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={`${headingFont.variable} ${monoFont.variable}`}>
+      <body className={`${bodyFont.variable} ${monoFont.variable}`}>
         <QueryProvider>
           <AppShell>{children}</AppShell>
         </QueryProvider>

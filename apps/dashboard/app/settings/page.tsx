@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { SettingsForm } from "@/components/settings-form";
+import { PageHeader } from "@/components/page-header";
 
 type DashboardConfig = {
   ORCHESTRATOR_URL?: string;
@@ -24,12 +25,11 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure external integration credentials stored in .flowdb.config.json.
-        </p>
-      </section>
+      <PageHeader
+        title="Settings"
+        description="Configure external integration credentials stored in .flowdb.config.json."
+        breadcrumb={["Dashboard", "Settings"]}
+      />
 
       <SettingsForm
         defaultValues={{

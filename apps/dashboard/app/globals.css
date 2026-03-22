@@ -2,13 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 :root {
-  --background: 210 100% 99%;
-  --foreground: 214 45% 12%;
+  --background: 0 0% 98.4%;
+  --foreground: 0 0% 13%;
   --card: 0 0% 100%;
-  --card-foreground: 214 45% 12%;
-  --muted-foreground: 215 16% 41%;
-  --border: 214 32% 89%;
+  --card-foreground: 0 0% 13%;
+  --muted-foreground: 0 0% 45%;
+  --border: 0 0% 88%;
 }
 
 * {
@@ -17,11 +26,15 @@
 
 body {
   margin: 0;
-  background: hsl(var(--background));
+  background: #f8f9fb;
   color: hsl(var(--foreground));
-  font-family: var(--font-heading), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .font-mono {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
