@@ -2,7 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fetchBranchDetail, fetchBranches, fetchOrchestratorHealth, teardownBranch } from "./api";
+import {
+  fetchBranchDetail,
+  fetchBranches,
+  fetchOrchestratorHealth,
+  reseedDemoBranches,
+  seedBranch,
+  teardownBranch
+} from "./api";
 
 export function useBranches() {
   return useQuery({
@@ -32,6 +39,18 @@ export function useTeardownBranch() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["branches"] });
     }
+  });
+}
+
+export function useSeedBranch() {
+  return useMutation({
+    mutationFn: ({ name, sql }: { name: string; sql: string }) => seedBranch(name, sql)
+  });
+}
+
+export function useReseedDemoBranches() {
+  return useMutation({
+    mutationFn: reseedDemoBranches
   });
 }
 

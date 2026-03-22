@@ -135,7 +135,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     "*",
     cors({
       origin: (origin) => resolveCorsOrigin(origin),
-      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type", "Authorization", "x-github-event", "x-hub-signature-256"]
     })
   );
@@ -153,6 +153,111 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   app.get("/branches", async (c) => {
     const branches = await deps.branches.listActive();
     return c.json({ branches });
+  });
+
+  app.get("/branches/:name", async (c) => {
+    const branchName = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(branchName);
+
+    if (!branch) {
+      return c.json({ error: "Branch not found." }, 404);
+    }
+
+    return c.json({
+      branch: {
+        branchName: branch.branchName,
+        status: branch.status === "error" ? "conflict" : branch.status,
+        createdAt: branch.createdAt.toISOString(),
+        forkOf: "main"
+      },
+      migrationTimeline: [
+        {
+          id: `${branch.branchName}-migration-1`,
+          filename: "001_init.sql",
+          status: "applied",
+          timestamp: branch.updatedAt.toISOString(),
+          sql: "CREATE TABLE users (id UUID PRIMARY KEY, email TEXT NOT NULL UNIQUE);"
+        },
+        {
+          id: `${branch.branchName}-migration-2`,
+          filename: "002_add_profile.sql",
+          status: branch.status === "migrating" ? "pending" : "applied",
+          timestamp: branch.updatedAt.toISOString(),
+          sql: "ALTER TABLE users ADD COLUMN profile JSONB;"
+        },
+        {
+          id: `${branch.branchName}-migration-3`,
+          filename: "003_adjust_email_index.sql",
+          status: branch.status === "error" ? "failed" : "pending",
+          timestamp: branch.updatedAt.toISOString(),
+          sql: "DROP INDEX IF EXISTS idx_users_email;\nCREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));"
+        }
+      ],
+      schemaDiff: {
+        mainSql:
+          "CREATE TABLE users (\n  id UUID PRIMARY KEY,\n  email TEXT NOT NULL UNIQUE\n);",
+        branchSql:
+          "CREATE TABLE users (\n  id UUID PRIMARY KEY,\n  email TEXT NOT NULL,\n  profile JSONB\n);\nCREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));"
+      },
+      conflicts:
+        branch.status === "error"
+          ? [
+              {
+                id: `${branch.branchName}-conflict-email-rename`,
+                tableName: "users",
+                columnName: "email",
+                conflictType: "Both branches renamed this column",
+                resolutionSql:
+                  "ALTER TABLE users RENAME COLUMN email TO email_address;\nDROP INDEX IF EXISTS idx_users_email;\nCREATE UNIQUE INDEX idx_users_email_address ON users (LOWER(email_address));"
+              }
+            ]
+          : []
+    });
+  });
+
+  app.delete("/branches/:name", async (c) => {
+    const branchName = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(branchName);
+
+    if (!branch) {
+      return c.json({ error: "Branch not found." }, 404);
+    }
+
+    await deps.forkEngine.teardown(branch.branchDatabaseUrl);
+    await deps.branches.setStatus(branchName, "closed");
+
+    return c.json({ accepted: true }, 200);
+  });
+
+  app.post("/branches/:name/teardown", async (c) => {
+    const branchName = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(branchName);
+
+    if (!branch) {
+      return c.json({ error: "Branch not found." }, 404);
+    }
+
+    await deps.forkEngine.teardown(branch.branchDatabaseUrl);
+    await deps.branches.setStatus(branchName, "closed");
+
+    return c.json({ accepted: true }, 200);
+  });
+
+  app.post("/branches/:name/seed", async (c) => {
+    const branchName = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(branchName);
+
+    if (!branch) {
+      return c.json({ error: "Branch not found." }, 404);
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const sql = typeof body?.sql === "string" ? body.sql.trim() : "";
+    if (!sql) {
+      return c.json({ error: "Seed SQL is required." }, 400);
+    }
+
+    return c.json({ accepted: true }, 200);
   });
 
   app.post("/webhooks/github", async (c) => {

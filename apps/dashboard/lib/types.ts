@@ -14,11 +14,18 @@ export type BranchApiResponse = {
 };
 
 export type BranchDetailApiResponse = {
+  branch?: {
+    branchName: string;
+    status: BranchStatus;
+    createdAt?: string;
+    forkOf?: string;
+  };
   migrationTimeline: Array<{
     id: string;
     filename: string;
-    status: BranchStatus;
+    status: "applied" | "pending" | "failed" | BranchStatus;
     timestamp: string;
+    sql?: string;
   }>;
   schemaDiff: {
     mainSql: string;
@@ -26,7 +33,11 @@ export type BranchDetailApiResponse = {
   };
   conflicts: Array<{
     id: string;
-    target: string;
-    hint: string;
+    target?: string;
+    hint?: string;
+    tableName?: string;
+    columnName?: string;
+    conflictType?: string;
+    resolutionSql?: string;
   }>;
 };
