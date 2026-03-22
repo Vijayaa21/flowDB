@@ -5,6 +5,7 @@ import { AlertTriangle, Database, GitMerge } from "lucide-react";
 
 import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -12,8 +13,9 @@ import { useBranches } from "@/lib/queries";
 
 export default function OverviewPage() {
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
-  const { data, isLoading, isError, refetch } = useBranches();
+  const { data, error, isLoading, isError, refetch } = useBranches();
   const branches = data?.branches ?? [];
+  const errorMessage = error instanceof Error ? error.message : "Unknown error while loading branches.";
 
   const totalBranches = branches.length;
   const activeMigrations = branches.filter((branch) => branch.status === "migrating").length;
@@ -62,15 +64,26 @@ export default function OverviewPage() {
         <h2 className="mb-4 text-xl font-bold text-gray-900">Branch Health Feed</h2>
         {isLoading && (
           <Card className="border-gray-200 bg-white">
-            <CardContent className="p-8">
-              <p className="text-center text-gray-600">Loading branch telemetry...</p>
+            <CardHeader>
+              <CardTitle className="text-base">Loading branch telemetry...</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pb-8">
+              <div className="h-4 w-full animate-pulse rounded bg-gray-200" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
+              <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
             </CardContent>
           </Card>
         )}
         {isError && (
           <Card className="border-gray-200 bg-white">
-            <CardContent className="p-8">
-              <p className="text-center text-red-600">Unable to load orchestrator data.</p>
+            <CardHeader>
+              <CardTitle className="text-base text-red-700">Failed to load branch telemetry</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pb-8">
+              <p className="text-sm text-red-600">{errorMessage}</p>
+              <Button type="button" variant="outline" onClick={handleRefresh}>
+                Retry
+              </Button>
             </CardContent>
           </Card>
         )}

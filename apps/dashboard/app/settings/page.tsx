@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { SettingsForm } from "@/components/settings-form";
 import { PageHeader } from "@/components/page-header";
+import { ORCHESTRATOR_URL } from "@/lib/config";
 
 type DashboardConfig = {
   ORCHESTRATOR_URL?: string;
@@ -33,7 +34,7 @@ export default async function SettingsPage() {
 
       <SettingsForm
         defaultValues={{
-          orchestratorUrl: config.ORCHESTRATOR_URL ?? "http://localhost:3000",
+          orchestratorUrl: config.ORCHESTRATOR_URL ?? ORCHESTRATOR_URL,
           githubAppId: config.GITHUB_APP_ID ?? "",
           vercelToken: config.VERCEL_TOKEN ?? ""
         }}

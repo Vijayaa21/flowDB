@@ -47,7 +47,7 @@ export function SettingsForm({ defaultValues }: SettingsFormProps) {
               id="orchestratorUrl"
               name="orchestratorUrl"
               type="url"
-              placeholder="http://localhost:3000"
+              placeholder={defaultValues.orchestratorUrl}
               defaultValue={defaultValues.orchestratorUrl}
               required
               className="border-gray-300 focus:ring-green-500 focus:border-green-500"

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Database } from "lucide-react";
 
+import { useOrchestratorHealth } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -12,15 +13,14 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: "⚙️" }
 ];
 
-type SidebarProps = {
-  connectionStatus?: "connected" | "disconnected";
-};
-
-export function Sidebar({ connectionStatus = "connected" }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname();
+  const health = useOrchestratorHealth();
+  const isConnected = health.isSuccess && health.data?.status === "ok";
+  const isOffline = health.isError;
 
   return (
-    <div className="hidden md:fixed md:left-0 md:top-0 md:block md:h-screen md:w-64 md:border-r md:border-gray-200 md:bg-white md:flex md:flex-col">
+    <div className="hidden md:fixed md:left-0 md:top-0 md:h-screen md:w-64 md:border-r md:border-gray-200 md:bg-white md:flex md:flex-col">
       {/* Logo Section */}
       <div className="border-b border-gray-200 p-6">
         <div className="flex items-center gap-2">
@@ -57,11 +57,13 @@ export function Sidebar({ connectionStatus = "connected" }: SidebarProps) {
           <div
             className={cn(
               "h-2 w-2 rounded-full animate-pulse",
-              connectionStatus === "connected" ? "bg-green-500" : "bg-red-500"
+              isConnected ? "bg-green-500" : "bg-red-500"
             )}
           />
           <span className="text-gray-600">
-            {connectionStatus === "connected" ? "Connected" : "Disconnected"}
+            {isConnected && "Orchestrator connected"}
+            {isOffline && "Orchestrator offline — start with bun run dev in apps/orchestrator"}
+            {health.isLoading && "Checking orchestrator..."}
           </span>
         </div>
       </div>

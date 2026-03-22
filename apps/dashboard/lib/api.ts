@@ -1,9 +1,5 @@
 import type { BranchApiResponse, BranchDetailApiResponse } from "./types";
-
-const ORCHESTRATOR_URL =
-  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ??
-  process.env.ORCHESTRATOR_URL ??
-  "http://localhost:3000";
+import { ORCHESTRATOR_URL } from "./config";
 
 async function fetchJson<T>(endpoint: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${ORCHESTRATOR_URL}${endpoint}`, {
@@ -16,7 +12,14 @@ async function fetchJson<T>(endpoint: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    let details = "";
+    try {
+      const payload = (await response.json()) as { error?: string };
+      details = payload.error ? `: ${payload.error}` : "";
+    } catch {
+      details = "";
+    }
+    throw new Error(`Request failed with ${response.status}${details}`);
   }
 
   return (await response.json()) as T;
@@ -49,4 +52,8 @@ export async function teardownBranch(name: string): Promise<void> {
   } catch {
     return;
   }
+}
+
+export async function fetchOrchestratorHealth(): Promise<{ status: string; version?: string }> {
+  return fetchJson<{ status: string; version?: string }>("/health");
 }

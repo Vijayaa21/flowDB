@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 
 import { PostgreSQLForkEngine } from "@flowdb/core";
 
@@ -84,6 +85,26 @@ function parseJsonSafely<T>(raw: string): T | null {
   }
 }
 
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (origin === "http://localhost:4010") {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+
+function resolveCorsOrigin(originHeader: string | undefined): string {
+  if (originHeader && isAllowedCorsOrigin(originHeader)) {
+    return originHeader;
+  }
+  return "http://localhost:4010";
+}
+
 export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono {
   const defaults = partialDeps ? undefined : createDefaultDependencies();
   const deps: OrchestratorDependencies = {
@@ -109,6 +130,21 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   } as OrchestratorDependencies;
 
   const app = new Hono();
+
+  app.use(
+    "*",
+    cors({
+      origin: (origin) => resolveCorsOrigin(origin),
+      allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization", "x-github-event", "x-hub-signature-256"]
+    })
+  );
+
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("Access-Control-Allow-Origin", resolveCorsOrigin(c.req.header("origin")));
+    c.header("Vary", "Origin");
+  });
 
   app.get("/health", (c) => {
     return c.json({ status: "ok", version: deps.version });
