@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import nextPlugin from "@next/eslint-plugin-next";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 
@@ -20,6 +21,7 @@ export default [
       "@typescript-eslint": tsPlugin
     },
     rules: {
+      "no-undef": "off",
       ...tsPlugin.configs.recommended.rules,
       "@typescript-eslint/no-unused-vars": [
         "warn",
@@ -28,6 +30,26 @@ export default [
           varsIgnorePattern: "^_"
         }
       ]
+    }
+  },
+  {
+    files: [
+      "apps/dashboard/**/*.{js,jsx,ts,tsx}",
+      "app/**/*.{js,jsx,ts,tsx}",
+      "components/**/*.{js,jsx,ts,tsx}",
+      "lib/**/*.{js,jsx,ts,tsx}"
+    ],
+    settings: {
+      next: {
+        rootDir: ["apps/dashboard/"]
+      }
+    },
+    plugins: {
+      "@next/next": nextPlugin
+    },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules
     }
   }
 ];
