@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 
 import { PostgreSQLForkEngine } from "@flowdb/core";
 
@@ -99,13 +100,29 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
   const app = new Hono();
 
+  app.use(
+    cors({
+      origin: ["http://localhost:3003", "http://localhost:4010"],
+      credentials: true
+    })
+  );
+
   app.get("/health", (c) => {
     return c.json({ status: "ok", version: deps.version });
   });
 
   app.get("/branches", async (c) => {
     const branches = await deps.branches.listActive();
-    return c.json({ branches });
+    return c.json(branches);
+  });
+
+  app.get("/branches/:name", async (c) => {
+    const name = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(name);
+    if (!branch) {
+      return c.json({ error: `Branch "${name}" not found.` }, 404);
+    }
+    return c.json(branch);
   });
 
   app.post("/webhooks/github", async (c) => {
