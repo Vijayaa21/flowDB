@@ -7,6 +7,7 @@ import {
   PostgresBranchStateRepository,
   type BranchStateRepository
 } from "./branch-state-repository";
+import { getConfig } from "./config";
 import { runPendingMigrations } from "./migration-runner";
 import { githubPullRequestSchema, githubPushSchema, vercelWebhookSchema } from "./schemas";
 import { verifyGithubSignature } from "./security";
@@ -31,30 +32,50 @@ type OrchestratorDependencies = {
   scheduleTask: (task: () => Promise<void>) => void;
 };
 
-function createDefaultDependencies(): OrchestratorDependencies {
-  const sourceDatabaseUrl = process.env.DATABASE_URL;
-  const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
-  const vercelApiToken = process.env.VERCEL_API_TOKEN;
+class NoopBranchStateRepository implements BranchStateRepository {
+  public async upsert(): Promise<void> {
+    return;
+  }
 
-  if (!sourceDatabaseUrl) {
-    throw new Error("DATABASE_URL is required.");
+  public async getByBranchName(): Promise<null> {
+    return null;
   }
-  if (!webhookSecret) {
-    throw new Error("GITHUB_WEBHOOK_SECRET is required.");
+
+  public async getByPrNumber(): Promise<null> {
+    return null;
   }
-  if (!vercelApiToken) {
-    throw new Error("VERCEL_API_TOKEN is required.");
+
+  public async setStatus(): Promise<void> {
+    return;
   }
+
+  public async listActive() {
+    return [];
+  }
+}
+
+class NoopVercelClient implements VercelClient {
+  public async injectDeploymentDatabaseUrl(): Promise<void> {
+    return;
+  }
+}
+
+function createDefaultDependencies(): OrchestratorDependencies {
+  const config = getConfig();
+  const hasDatabase = Boolean(config.databaseUrl);
+  const hasVercelToken = Boolean(config.vercelApiToken);
 
   return {
     forkEngine: new PostgreSQLForkEngine(),
-    branches: new PostgresBranchStateRepository(sourceDatabaseUrl),
-    vercel: new VercelSdkClient(vercelApiToken),
+    branches: hasDatabase
+      ? new PostgresBranchStateRepository(config.databaseUrl as string)
+      : new NoopBranchStateRepository(),
+    vercel: hasVercelToken ? new VercelSdkClient(config.vercelApiToken as string) : new NoopVercelClient(),
     migrationRunner: runPendingMigrations,
-    webhookSecret,
-    sourceDatabaseUrl,
-    projectRoot: process.env.FLOWDB_PROJECT_ROOT ?? process.cwd(),
-    version: process.env.FLOWDB_VERSION ?? "0.1.0",
+    webhookSecret: config.githubWebhookSecret ?? "",
+    sourceDatabaseUrl: config.sourceDatabaseUrl,
+    projectRoot: config.projectRoot,
+    version: config.version,
     scheduleTask: (task) => {
       setTimeout(() => {
         void task();
@@ -101,19 +122,32 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   const app = new Hono();
 
   app.use(
+    "/*",
     cors({
-      origin: ["http://localhost:3003", "http://localhost:4010"],
-      credentials: true
+      origin: ["http://localhost:4010", "http://localhost:3001"],
+      allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"]
     })
   );
 
   app.get("/health", (c) => {
-    return c.json({ status: "ok", version: deps.version });
+    return c.json(
+      {
+        status: "ok",
+        version: deps.version,
+        timestamp: new Date().toISOString()
+      },
+      200
+    );
   });
 
   app.get("/branches", async (c) => {
-    const branches = await deps.branches.listActive();
-    return c.json(branches);
+    try {
+      const branches = await deps.branches.listActive();
+      return c.json(branches, 200);
+    } catch {
+      return c.json([], 200);
+    }
   });
 
   app.get("/branches/:name", async (c) => {

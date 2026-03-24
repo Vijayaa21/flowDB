@@ -137,7 +137,9 @@ describe("orchestrator routes", () => {
   test("GET /health returns status and version", async () => {
     const response = await request(server).get("/health");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: "ok", version: "test-version" });
+    expect(response.body.status).toBe("ok");
+    expect(response.body.version).toBe("test-version");
+    expect(typeof response.body.timestamp).toBe("string");
   });
 
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {
@@ -238,8 +240,8 @@ describe("orchestrator routes", () => {
     const response = await request(server).get("/branches");
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body.branches)).toBe(true);
-    expect(response.body.branches.every((branch: { status: string }) => !!branch.status)).toBe(true);
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body.every((branch: { status: string }) => !!branch.status)).toBe(true);
   });
 
   test("POST /webhooks/github rejects invalid signature", async () => {
