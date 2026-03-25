@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 
 type BranchRecord = {
@@ -59,6 +60,7 @@ function TimelineSkeleton() {
 }
 
 export default function HomePage() {
+  const { data: session } = useSession();
   const [activeSection, setActiveSection] = useState<SectionKey>("branches");
   const [branches, setBranches] = useState<BranchRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -185,9 +187,19 @@ export default function HomePage() {
     meta: branch.status ?? "active"
   }));
 
+  const userName = session?.user?.name ?? "GitHub User";
+  const userAvatar = session?.user?.image ?? "";
+  const githubId = session?.user?.githubId ?? "";
+  const initials = userName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="mx-auto flex w-full max-w-[1400px]">
+      <div className="mx-auto flex w-full max-w-7xl">
         <aside className="hidden h-screen border-r border-slate-200 bg-white md:flex md:w-16 md:flex-col md:items-center md:py-6 lg:w-64 lg:items-stretch dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-8 px-2 text-center text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 lg:px-6 lg:text-left dark:text-slate-400">
             <span className="md:block lg:hidden">F</span>
@@ -215,6 +227,29 @@ export default function HomePage() {
           </nav>
 
           <div className="border-t border-slate-200 px-2 pt-4 lg:px-4 dark:border-slate-800">
+            <div className="mb-3 hidden items-center gap-3 rounded-xl border border-slate-200 p-2 lg:flex dark:border-slate-800">
+              {userAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={userAvatar}
+                  alt={userName}
+                  className="h-9 w-9 rounded-full border border-slate-300 object-cover dark:border-slate-700"
+                />
+              ) : (
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                  {initials || "GH"}
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {userName}
+                </p>
+                <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                  {githubId ? `GitHub #${githubId}` : "Signed in with GitHub"}
+                </p>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={toggleTheme}
@@ -224,6 +259,17 @@ export default function HomePage() {
                 {darkModeEnabled ? "D" : "L"}
               </span>
               <span className="hidden lg:inline">{darkModeEnabled ? "Dark" : "Light"} Mode</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void signOut({ callbackUrl: "/login" })}
+              className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-xs dark:border-slate-700">
+                O
+              </span>
+              <span className="hidden lg:inline">Sign out</span>
             </button>
           </div>
         </aside>

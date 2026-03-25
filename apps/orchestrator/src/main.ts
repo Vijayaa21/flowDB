@@ -31,7 +31,17 @@ async function start(): Promise<void> {
 
   const databaseConnected = await canConnectToDatabase(config.databaseUrl);
 
-  Bun.serve({
+  const bunRuntime = globalThis as typeof globalThis & {
+    Bun?: {
+      serve: (options: { port: number; fetch: typeof app.fetch }) => unknown;
+    };
+  };
+
+  if (!bunRuntime.Bun) {
+    throw new Error("Bun runtime is required to start the orchestrator server.");
+  }
+
+  bunRuntime.Bun.serve({
     port: config.port,
     fetch: app.fetch
   });
