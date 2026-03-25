@@ -292,6 +292,25 @@ describe("orchestrator routes", () => {
     expect(authorized.body).toEqual([]);
   });
 
+  test("DELETE /branches/:name tears down and closes branch", async () => {
+    await branchRepo.upsert("12345", {
+      prNumber: 500,
+      branchName: "feature/delete",
+      branchDatabaseUrl: "postgres://branch/feature/delete",
+      status: "active"
+    });
+
+    const response = await request(server)
+      .delete("/branches/feature%2Fdelete")
+      .set("authorization", authHeader);
+
+    expect(response.status).toBe(204);
+    expect(teardownCalls).toContain("postgres://branch/feature/delete");
+
+    const updated = await branchRepo.getByBranchName("12345", "feature/delete");
+    expect(updated?.status).toBe("closed");
+  });
+
   test("POST /webhooks/github rejects invalid signature", async () => {
     const payload = {
       action: "opened",

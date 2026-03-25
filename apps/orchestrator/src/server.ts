@@ -164,6 +164,20 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     return c.json(branch);
   });
 
+  app.delete("/branches/:name", async (c) => {
+    const githubId = c.get("githubId") as string;
+    const name = c.req.param("name");
+    const branch = await deps.branches.getByBranchName(githubId, name);
+
+    if (!branch) {
+      return c.json({ error: `Branch "${name}" not found.` }, 404);
+    }
+
+    await deps.forkEngine.teardown(branch.branchDatabaseUrl);
+    await deps.branches.setStatus(githubId, name, "closed");
+    return c.body(null, 204);
+  });
+
   app.post("/webhooks/github", async (c) => {
     const event = c.req.header("x-github-event");
     const signature = c.req.header("x-hub-signature-256");

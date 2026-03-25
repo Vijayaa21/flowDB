@@ -114,6 +114,6 @@ const authConfig: NextAuthConfig = {
 const nextAuthResult: NextAuthResult = NextAuth(authConfig);
 
 export const handlers = nextAuthResult.handlers;
-export const auth = nextAuthResult.auth;
+export const auth: NextAuthResult["auth"] = nextAuthResult.auth;
 export const signIn = nextAuthResult.signIn;
 export const signOut = nextAuthResult.signOut;
