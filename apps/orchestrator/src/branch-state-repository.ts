@@ -12,11 +12,11 @@ type BranchRow = {
 };
 
 export type BranchStateRepository = {
-  upsert(record: { prNumber: number; branchName: string; branchDatabaseUrl: string; status: BranchStatus }): Promise<void>;
-  getByBranchName(branchName: string): Promise<BranchRecord | null>;
-  getByPrNumber(prNumber: number): Promise<BranchRecord | null>;
-  setStatus(branchName: string, status: BranchStatus): Promise<void>;
-  listActive(): Promise<BranchRecord[]>;
+  upsert(ownerGithubId: string, record: { prNumber: number; branchName: string; branchDatabaseUrl: string; status: BranchStatus }): Promise<void>;
+  getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null>;
+  getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null>;
+  setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void>;
+  listActive(ownerGithubId: string): Promise<BranchRecord[]>;
 };
 
 function mapBranchRow(row: BranchRow): BranchRecord {
@@ -38,7 +38,7 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     this.pool = new Pool({ connectionString: databaseUrl });
   }
 
-  public async upsert(record: {
+  public async upsert(ownerGithubId: string, record: {
     prNumber: number;
     branchName: string;
     branchDatabaseUrl: string;
@@ -47,69 +47,70 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     await this.ensureSchema();
     await this.pool.query(
       `
-      INSERT INTO flowdb_branches (pr_number, branch_name, branch_database_url, status)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (branch_name)
+      INSERT INTO flowdb_branches (owner_github_id, pr_number, branch_name, branch_database_url, status)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (owner_github_id, branch_name)
       DO UPDATE SET
         pr_number = EXCLUDED.pr_number,
         branch_database_url = EXCLUDED.branch_database_url,
         status = EXCLUDED.status,
         updated_at = NOW()
       `,
-      [record.prNumber, record.branchName, record.branchDatabaseUrl, record.status]
+      [ownerGithubId, record.prNumber, record.branchName, record.branchDatabaseUrl, record.status]
     );
   }
 
-  public async getByBranchName(branchName: string): Promise<BranchRecord | null> {
+  public async getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null> {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
       SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
       FROM flowdb_branches
-      WHERE branch_name = $1
+      WHERE owner_github_id = $1 AND branch_name = $2
       LIMIT 1
       `,
-      [branchName]
+      [ownerGithubId, branchName]
     );
     return result.rows[0] ? mapBranchRow(result.rows[0]) : null;
   }
 
-  public async getByPrNumber(prNumber: number): Promise<BranchRecord | null> {
+  public async getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null> {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
       SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
       FROM flowdb_branches
-      WHERE pr_number = $1
+      WHERE owner_github_id = $1 AND pr_number = $2
       ORDER BY updated_at DESC
       LIMIT 1
       `,
-      [prNumber]
+      [ownerGithubId, prNumber]
     );
     return result.rows[0] ? mapBranchRow(result.rows[0]) : null;
   }
 
-  public async setStatus(branchName: string, status: BranchStatus): Promise<void> {
+  public async setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void> {
     await this.ensureSchema();
     await this.pool.query(
       `
       UPDATE flowdb_branches
-      SET status = $2, updated_at = NOW()
-      WHERE branch_name = $1
+      SET status = $3, updated_at = NOW()
+      WHERE owner_github_id = $1 AND branch_name = $2
       `,
-      [branchName, status]
+      [ownerGithubId, branchName, status]
     );
   }
 
-  public async listActive(): Promise<BranchRecord[]> {
+  public async listActive(ownerGithubId: string): Promise<BranchRecord[]> {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
       SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
       FROM flowdb_branches
-      WHERE status <> 'closed'
+      WHERE owner_github_id = $1 AND status <> 'closed'
       ORDER BY updated_at DESC
-      `
+      `,
+      [ownerGithubId]
     );
     return result.rows.map(mapBranchRow);
   }
@@ -121,14 +122,22 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
           `
           CREATE TABLE IF NOT EXISTS flowdb_branches (
             id BIGSERIAL PRIMARY KEY,
+            owner_github_id TEXT NOT NULL,
             pr_number INTEGER NOT NULL,
-            branch_name TEXT NOT NULL UNIQUE,
+            branch_name TEXT NOT NULL,
             branch_database_url TEXT NOT NULL,
             status TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS owner_github_id TEXT;
+          UPDATE flowdb_branches SET owner_github_id = 'legacy' WHERE owner_github_id IS NULL;
+          ALTER TABLE flowdb_branches ALTER COLUMN owner_github_id SET NOT NULL;
+          ALTER TABLE flowdb_branches DROP CONSTRAINT IF EXISTS flowdb_branches_branch_name_key;
+          CREATE UNIQUE INDEX IF NOT EXISTS flowdb_branches_owner_branch_uidx
+            ON flowdb_branches(owner_github_id, branch_name);
           CREATE INDEX IF NOT EXISTS flowdb_branches_pr_number_idx ON flowdb_branches(pr_number);
+          CREATE INDEX IF NOT EXISTS flowdb_branches_owner_github_id_idx ON flowdb_branches(owner_github_id);
           `
         )
         .then(() => undefined);
