@@ -4,12 +4,15 @@ import { cors } from "hono/cors";
 import { PostgreSQLForkEngine } from "@flowdb/core";
 
 import {
+  NoopGithubCommentPublisher,
+  OctokitGithubCommentPublisher,
+  type GithubCommentPublisher
+} from "./github-pr-comments";
+import {
   PostgresBranchStateRepository,
   type BranchStateRepository
 } from "./branch-state-repository";
-import { getConfig } from "./config";
-import { authMiddleware } from "./middleware/auth";
-import { runPendingMigrations } from "./migration-runner";
+import { runPendingMigrations, type MigrationRunReport } from "./migration-runner";
 import { githubPullRequestSchema, githubPushSchema, vercelWebhookSchema } from "./schemas";
 import { verifyGithubSignature } from "./security";
 import { VercelSdkClient, type VercelClient } from "./vercel-client";
@@ -25,7 +28,8 @@ type OrchestratorDependencies = {
   forkEngine: ForkEngine;
   branches: BranchStateRepository;
   vercel: VercelClient;
-  migrationRunner: (projectRoot: string, branchDatabaseUrl: string) => Promise<{ applied: string[] }>;
+  githubComments: GithubCommentPublisher;
+  migrationRunner: (projectRoot: string, branchDatabaseUrl: string) => Promise<MigrationRunReport>;
   webhookSecret: string;
   sourceDatabaseUrl: string;
   projectRoot: string;
@@ -33,10 +37,11 @@ type OrchestratorDependencies = {
   scheduleTask: (task: () => Promise<void>) => void;
 };
 
-class NoopBranchStateRepository implements BranchStateRepository {
-  public async upsert(): Promise<void> {
-    return;
-  }
+function createDefaultDependencies(): OrchestratorDependencies {
+  const sourceDatabaseUrl = process.env.DATABASE_URL;
+  const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  const vercelApiToken = process.env.VERCEL_API_TOKEN;
+  const githubToken = process.env.GITHUB_TOKEN;
 
   public async getByBranchName(): Promise<null> {
     return null;
@@ -68,10 +73,11 @@ function createDefaultDependencies(): OrchestratorDependencies {
 
   return {
     forkEngine: new PostgreSQLForkEngine(),
-    branches: hasDatabase
-      ? new PostgresBranchStateRepository(config.databaseUrl as string)
-      : new NoopBranchStateRepository(),
-    vercel: hasVercelToken ? new VercelSdkClient(config.vercelApiToken as string) : new NoopVercelClient(),
+    branches: new PostgresBranchStateRepository(sourceDatabaseUrl),
+    vercel: new VercelSdkClient(vercelApiToken),
+    githubComments: githubToken
+      ? new OctokitGithubCommentPublisher(githubToken)
+      : new NoopGithubCommentPublisher(),
     migrationRunner: runPendingMigrations,
     webhookSecret: config.githubWebhookSecret ?? "",
     sourceDatabaseUrl: config.sourceDatabaseUrl,
@@ -104,6 +110,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       forkEngine: partialDeps?.forkEngine as ForkEngine,
       branches: partialDeps?.branches as BranchStateRepository,
       vercel: partialDeps?.vercel as VercelClient,
+      githubComments: partialDeps?.githubComments ?? new NoopGithubCommentPublisher(),
       migrationRunner: partialDeps?.migrationRunner ?? runPendingMigrations,
       webhookSecret: partialDeps?.webhookSecret ?? "",
       sourceDatabaseUrl: partialDeps?.sourceDatabaseUrl ?? "",
@@ -248,12 +255,40 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         if (!branch) {
           return;
         }
-        await deps.branches.setStatus(githubId, branchName, "migrating");
+        const owner = parsed.data.repository?.owner.login;
+        const repo = parsed.data.repository?.name;
+
+        await deps.branches.setStatus(branchName, "migrating");
+        let report: MigrationRunReport = {
+          applied: [],
+          pending: [],
+          schemaDiffSummary: "No migrations were applied.",
+          conflicts: []
+        };
+        let status = "active";
+
         try {
-          await deps.migrationRunner(deps.projectRoot, branch.branchDatabaseUrl);
-          await deps.branches.setStatus(githubId, branchName, "active");
+          report = await deps.migrationRunner(deps.projectRoot, branch.branchDatabaseUrl);
+          await deps.branches.setStatus(branchName, "active");
+          status = "active";
         } catch {
-          await deps.branches.setStatus(githubId, branchName, "error");
+          await deps.branches.setStatus(branchName, "error");
+          status = "error";
+        }
+
+        if (owner && repo) {
+          await deps.githubComments.upsertReconcileComment({
+            owner,
+            repo,
+            branchName,
+            data: {
+              branchName,
+              branchDbStatus: status,
+              pendingMigrations: report.pending,
+              schemaDiffSummary: report.schemaDiffSummary,
+              conflicts: report.conflicts
+            }
+          });
         }
       });
 
