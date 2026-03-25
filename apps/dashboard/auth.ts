@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig, NextAuthResult } from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { createHmac } from "node:crypto";
 
 /*
 GitHub OAuth App setup for local FlowDB development:
@@ -51,6 +52,29 @@ if (isPlaceholder(authSecret)) {
   );
 }
 
+function base64UrlEncode(input: string): string {
+  return Buffer.from(input, "utf8").toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function signFlowDbToken(githubId: string, secret: string): string {
+  const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = base64UrlEncode(
+    JSON.stringify({
+      githubId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 60 * 60
+    })
+  );
+  const data = `${header}.${payload}`;
+  const signature = createHmac("sha256", secret)
+    .update(data)
+    .digest("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+  return `${data}.${signature}`;
+}
+
 const authConfig: NextAuthConfig = {
   secret: authSecret,
   trustHost: true,
@@ -71,6 +95,9 @@ const authConfig: NextAuthConfig = {
       if (account?.provider === "github" && account.providerAccountId) {
         token.githubId = account.providerAccountId;
       }
+      if (typeof token.githubId === "string") {
+        token.flowdbToken = signFlowDbToken(token.githubId, authSecret);
+      }
       return token;
     },
     async session({ session, token }) {
@@ -78,6 +105,7 @@ const authConfig: NextAuthConfig = {
         session.user.githubId =
           typeof token.githubId === "string" ? token.githubId : undefined;
       }
+      session.token = typeof token.flowdbToken === "string" ? token.flowdbToken : undefined;
       return session;
     }
   }

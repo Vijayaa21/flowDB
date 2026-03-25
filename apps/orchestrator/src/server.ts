@@ -8,6 +8,7 @@ import {
   type BranchStateRepository
 } from "./branch-state-repository";
 import { getConfig } from "./config";
+import { authMiddleware } from "./middleware/auth";
 import { runPendingMigrations } from "./migration-runner";
 import { githubPullRequestSchema, githubPushSchema, vercelWebhookSchema } from "./schemas";
 import { verifyGithubSignature } from "./security";
@@ -141,9 +142,12 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     );
   });
 
+  app.use("/*", authMiddleware);
+
   app.get("/branches", async (c) => {
+    const githubId = c.get("githubId") as string;
     try {
-      const branches = await deps.branches.listActive();
+      const branches = await deps.branches.listActive(githubId);
       return c.json(branches, 200);
     } catch {
       return c.json([], 200);
@@ -151,8 +155,9 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   });
 
   app.get("/branches/:name", async (c) => {
+    const githubId = c.get("githubId") as string;
     const name = c.req.param("name");
-    const branch = await deps.branches.getByBranchName(name);
+    const branch = await deps.branches.getByBranchName(githubId, name);
     if (!branch) {
       return c.json({ error: `Branch "${name}" not found.` }, 404);
     }
@@ -184,13 +189,14 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       }
 
       const payload = parsed.data;
+      const githubId = c.get("githubId") as string;
       if (payload.action === "opened") {
         deps.scheduleTask(async () => {
           const branchDatabaseUrl = await deps.forkEngine.fork(
             deps.sourceDatabaseUrl,
             payload.pull_request.head.ref
           );
-          await deps.branches.upsert({
+          await deps.branches.upsert(githubId, {
             prNumber: payload.pull_request.number,
             branchName: payload.pull_request.head.ref,
             branchDatabaseUrl,
@@ -201,14 +207,14 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
       if (payload.action === "closed") {
         deps.scheduleTask(async () => {
-          const existing = await deps.branches.getByPrNumber(payload.pull_request.number);
+          const existing = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
           const target =
-            existing ?? (await deps.branches.getByBranchName(payload.pull_request.head.ref));
+            existing ?? (await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref));
           if (!target) {
             return;
           }
           await deps.forkEngine.teardown(target.branchDatabaseUrl);
-          await deps.branches.setStatus(target.branchName, "closed");
+          await deps.branches.setStatus(githubId, target.branchName, "closed");
         });
       }
 
@@ -222,17 +228,18 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       }
 
       deps.scheduleTask(async () => {
+        const githubId = c.get("githubId") as string;
         const branchName = toBranchName(parsed.data.ref);
-        const branch = await deps.branches.getByBranchName(branchName);
+        const branch = await deps.branches.getByBranchName(githubId, branchName);
         if (!branch) {
           return;
         }
-        await deps.branches.setStatus(branchName, "migrating");
+        await deps.branches.setStatus(githubId, branchName, "migrating");
         try {
           await deps.migrationRunner(deps.projectRoot, branch.branchDatabaseUrl);
-          await deps.branches.setStatus(branchName, "active");
+          await deps.branches.setStatus(githubId, branchName, "active");
         } catch {
-          await deps.branches.setStatus(branchName, "error");
+          await deps.branches.setStatus(githubId, branchName, "error");
         }
       });
 
@@ -255,8 +262,9 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
     if (payload.type === "deployment.ready" && deployment?.target === "preview") {
       deps.scheduleTask(async () => {
+        const githubId = c.get("githubId") as string;
         const branchName = deployment.meta?.githubCommitRef ?? payload.payload?.git?.branch;
-        const branch = branchName ? await deps.branches.getByBranchName(branchName) : null;
+        const branch = branchName ? await deps.branches.getByBranchName(githubId, branchName) : null;
         const databaseUrl = branch?.branchDatabaseUrl ?? deps.sourceDatabaseUrl;
         await deps.vercel.injectDeploymentDatabaseUrl(deployment.id, databaseUrl);
       });

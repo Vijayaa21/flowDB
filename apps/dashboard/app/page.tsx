@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 
+import { apiFetch } from "./api-fetch";
+
 type BranchRecord = {
   branchName: string;
   status?: "active" | "closed" | "error" | "migrating" | string;
@@ -71,11 +73,10 @@ export default function HomePage() {
   const loadBranches = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${orchestratorUrl}/branches`, {
+      const response = await apiFetch(`${orchestratorUrl}/branches`, session ?? null, {
         headers: {
           accept: "application/json"
-        },
-        cache: "no-store"
+        }
       });
 
       if (!response.ok) {
@@ -89,7 +90,7 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     void loadBranches();
@@ -167,9 +168,7 @@ export default function HomePage() {
     setShowTeardownModal(false);
 
     try {
-      const healthResponse = await fetch(`${orchestratorUrl}/health`, {
-        cache: "no-store"
-      });
+      const healthResponse = await apiFetch(`${orchestratorUrl}/health`, session ?? null);
 
       if (!healthResponse.ok) {
         throw new Error("offline");
