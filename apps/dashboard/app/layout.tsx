@@ -16,7 +16,7 @@ export const metadata = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <body className="bg-[var(--gh-canvas-subtle)] text-[var(--gh-fg-default)]">
         <Providers>
           {children}
           <Toaster position="top-right" richColors closeButton theme="system" />
