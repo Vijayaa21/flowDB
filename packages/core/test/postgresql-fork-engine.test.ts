@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -8,7 +8,7 @@ import { ForkEngine } from "../src";
 
 const TEST_DB_PREFIX = "flowdb_test";
 
-let container: PostgreSqlContainer | undefined;
+let container: StartedPostgreSqlContainer | undefined;
 let maintenanceUrl: string;
 
 async function queryExists(databaseName: string): Promise<boolean> {
