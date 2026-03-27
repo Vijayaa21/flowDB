@@ -1,3 +1,5 @@
+import path from "node:path";
+
 type Config = {
   port: number;
   databaseUrl: string | null;
@@ -6,6 +8,7 @@ type Config = {
   vercelApiToken: string | null;
   projectRoot: string;
   version: string;
+  migrationsDir: string;
 };
 
 function readOptional(name: string): string | null {
@@ -33,7 +36,8 @@ export function getConfig(): Config {
     githubWebhookSecret: readOptional("GITHUB_WEBHOOK_SECRET"),
     vercelApiToken: readOptional("VERCEL_API_TOKEN"),
     projectRoot: readOptional("FLOWDB_PROJECT_ROOT") ?? process.cwd(),
-    version: readOptional("FLOWDB_VERSION") ?? "0.1.0"
+    version: readOptional("FLOWDB_VERSION") ?? "0.1.0",
+    migrationsDir: path.resolve(process.cwd(), "apps", "orchestrator", "migrations")
   };
 }
 
