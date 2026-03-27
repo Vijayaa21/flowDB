@@ -1,13 +1,18 @@
 export * from "./contracts";
-export * from "./app";
 export * from "./config";
 export * from "./migrations";
 
 import { pathToFileURL } from "node:url";
+import { handle } from "hono/vercel";
 
-import { createApp } from "./app";
+import { createApp } from "./server";
 import { getConfig } from "./config";
 import { runPendingMigrations } from "./migrations";
+
+const app = createApp();
+
+export { app };
+export default handle(app);
 
 export async function startOrchestrator(): Promise<void> {
 	const config = getConfig();
