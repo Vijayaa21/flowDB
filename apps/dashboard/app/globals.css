@@ -1,0 +1,35 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@source "./**/*.{ts,tsx}";
+
+:root {
+  --gh-canvas-default: #ffffff;
+  --gh-canvas-subtle: #f6f8fa;
+  --gh-fg-default: #24292f;
+  --gh-fg-muted: #57606a;
+  --gh-border-default: #d0d7de;
+  --gh-accent-emphasis: #0969da;
+  color-scheme: light;
+}
+
+.dark {
+  --gh-canvas-default: #161b22;
+  --gh-canvas-subtle: #0d1117;
+  --gh-fg-default: #e6edf3;
+  --gh-fg-muted: #8b949e;
+  --gh-border-default: #30363d;
+  --gh-accent-emphasis: #2f81f7;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--gh-canvas-subtle);
+  color: var(--gh-fg-default);
+}

@@ -16,6 +16,8 @@
     }
   },
   "scripts": {
+    "dev": "bun run src/main.ts",
+    "start": "bun run src/main.ts",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
