@@ -46,7 +46,7 @@ function verifyJwt(token: string, secret: string): JwtPayload | null {
   }
 }
 
-export const authMiddleware: MiddlewareHandler = async (c, next) => {
+export const authMiddleware: MiddlewareHandler<{ Variables: { githubId: string } }> = async (c, next) => {
   const header = c.req.header("authorization");
   const secret = process.env.AUTH_SECRET;
 

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@flowdb/core": "0.1.0",
+    "@flowdb/orchestrator": "0.1.0",
     "@flowdb/reconciler": "0.1.0",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",

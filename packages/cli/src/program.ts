@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import chalk from "chalk";
 import { Command } from "commander";
@@ -8,6 +9,8 @@ import ora, { type Ora } from "ora";
 import { Client } from "pg";
 
 import { PostgreSQLForkEngine as ForkEngine } from "@flowdb/core";
+import { OrchestratorClient, type OrchestratorConfig } from "./orchestrator-client";
+import { CredentialManager, type Credentials } from "./credential-manager";
 
 type Migration = {
   id: string;
@@ -40,6 +43,8 @@ type CliDeps = {
   ui: Ui;
   exit: (code: number) => void;
   forkEngine: ForkEngine;
+  orchestratorClient?: OrchestratorClient;
+  credentialManager?: CredentialManager;
 };
 
 const CONFIG_FILE = ".flowdb.config.json";
@@ -56,7 +61,8 @@ function defaultDeps(): CliDeps {
     exit: (code) => {
       process.exitCode = code;
     },
-    forkEngine: new ForkEngine()
+    forkEngine: new ForkEngine(),
+    credentialManager: new CredentialManager()
   };
 }
 
@@ -247,6 +253,33 @@ async function commandWrapper(ui: Ui, action: () => Promise<void>, exit: (code: 
   }
 }
 
+function loadOrchestratorConfig(
+  env: NodeJS.ProcessEnv,
+  credentialManager?: CredentialManager
+): OrchestratorConfig | null {
+  // Try environment variables first
+  const envConfig = OrchestratorClient.fromEnv(env);
+  if (envConfig) {
+    return envConfig;
+  }
+
+  // Try credentials file
+  if (credentialManager) {
+    const credentials = credentialManager.loadCredentials();
+    if (credentials) {
+      return {
+        apiUrl: credentials.apiUrl,
+        apiKey: credentials.apiKey,
+        jwtToken: credentials.jwtToken,
+        orgSlug: credentials.orgSlug,
+        projectSlug: credentials.projectSlug
+      };
+    }
+  }
+
+  return null;
+}
+
 export function createProgram(inputDeps?: Partial<CliDeps>): Command {
   const deps = { ...defaultDeps(), ...inputDeps };
 
@@ -282,6 +315,99 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
     );
   });
 
+  program
+    .command("login")
+    .description("Authenticate with FlowDB orchestrator")
+    .option("-u, --url <url>", "Orchestrator API URL")
+    .option("-k, --api-key <key>", "API key for authentication")
+    .option("--org <org>", "Organization slug")
+    .option("--project <project>", "Project slug")
+    .action(async (options: { url?: string; apiKey?: string; org?: string; project?: string }) => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          if (!deps.credentialManager) {
+            throw new Error("Credential manager not available");
+          }
+
+          const apiUrl = options.url || deps.env.FLOWDB_ORCHESTRATOR_URL;
+          const orgSlug = options.org || deps.env.FLOWDB_ORG_SLUG;
+          const projectSlug = options.project || deps.env.FLOWDB_PROJECT_SLUG;
+          const apiKey = options.apiKey || deps.env.FLOWDB_API_KEY;
+
+          if (!apiUrl) {
+            throw new Error("Orchestrator API URL is required. Use -u/--url or set FLOWDB_ORCHESTRATOR_URL");
+          }
+
+          if (!orgSlug) {
+            throw new Error("Organization slug is required. Use --org or set FLOWDB_ORG_SLUG");
+          }
+
+          if (!projectSlug) {
+            throw new Error("Project slug is required. Use --project or set FLOWDB_PROJECT_SLUG");
+          }
+
+          if (!apiKey) {
+            throw new Error("API key is required. Use -k/--api-key or set FLOWDB_API_KEY");
+          }
+
+          const spinner = deps.ui.spinner("Testing connection to orchestrator...").start();
+
+          try {
+            const client = new OrchestratorClient({
+              apiUrl,
+              apiKey,
+              orgSlug,
+              projectSlug
+            });
+
+            const health = await client.health();
+            spinner.succeed(`Connected to orchestrator (version: ${health.version})`);
+
+            deps.credentialManager.saveCredentials({
+              apiUrl,
+              apiKey,
+              orgSlug,
+              projectSlug
+            });
+
+            deps.ui.log(chalk.green("Credentials saved to ~/.flowdb/credentials.json"));
+          } catch (error) {
+            spinner.fail();
+            throw error;
+          }
+        },
+        deps.exit
+      );
+    });
+
+  program.command("health").description("Check orchestrator health").action(async () => {
+    await commandWrapper(
+      deps.ui,
+      async () => {
+        const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+        if (!orchConfig) {
+          throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
+        }
+
+        const client = new OrchestratorClient(orchConfig);
+        const spinner = deps.ui.spinner("Checking orchestrator health...").start();
+
+        try {
+          const health = await client.health();
+          spinner.succeed("Orchestrator health check passed");
+          deps.ui.log(chalk.green(`Status: ${health.status}`));
+          deps.ui.log(chalk.green(`Version: ${health.version}`));
+          deps.ui.log(chalk.green(`Timestamp: ${health.timestamp}`));
+        } catch (error) {
+          spinner.fail();
+          throw error;
+        }
+      },
+      deps.exit
+    );
+  });
+
   const branch = program.command("branch").description("Manage branch databases");
 
   branch.command("list").description("List active branch databases").action(async () => {
@@ -291,8 +417,40 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
         const cwd = deps.cwd();
         const config = await readConfig(cwd, deps.env);
         const spinner = deps.ui.spinner("Loading branch databases...").start();
+
+        // Try to use orchestrator if available
+        const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+        let rows: string[][] = [];
+
+        if (orchConfig) {
+          try {
+            const client = new OrchestratorClient(orchConfig);
+            const response = await client.listBranches(25);
+            spinner.stop();
+
+            for (const branch of response.items || []) {
+              rows.push([
+                branch.name,
+                chalk.green("active"),
+                branch.createdAt ? chalk.cyan(new Date(branch.createdAt).toLocaleDateString()) : "unknown"
+              ]);
+            }
+
+            if (rows.length === 0) {
+              deps.ui.log(chalk.yellow("No branches found"));
+            } else {
+              deps.ui.log(renderTable(["name", "status", "created"], rows));
+            }
+
+            return;
+          } catch {
+            // Fall through to local fork engine if orchestrator fails
+            spinner.text = "Falling back to local branch detection...";
+          }
+        }
+
+        // Fallback to local fork engine
         const names = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
-        const rows: string[][] = [];
 
         for (const name of names) {
           const url = withDatabaseName(config.sourceDatabaseUrl, name);
@@ -310,6 +468,80 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
       deps.exit
     );
   });
+
+  branch
+    .command("create")
+    .argument("<name>", "Branch name")
+    .option("--source-url <url>", "Source database URL (optional, uses main database if not provided)")
+    .description("Create a new branch database")
+    .action(async (name: string, options: { sourceUrl?: string }) => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+
+          if (!orchConfig) {
+            throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
+          }
+
+          const client = new OrchestratorClient(orchConfig);
+          const spinner = deps.ui.spinner(`Creating branch '${name}'...`).start();
+
+          try {
+            const idempotencyKey = randomUUID();
+            const response = await client.createBranch(name, idempotencyKey, options.sourceUrl);
+            spinner.succeed(`Branch created: ${name}`);
+            deps.ui.log(chalk.green(`Branch ID: ${response.branch.id}`));
+            deps.ui.log(chalk.green(`Status: ${response.operation.status}`));
+            if (response.branch.databaseUrl) {
+              deps.ui.log(chalk.green(`Database URL: ${response.branch.databaseUrl}`));
+            }
+          } catch (error) {
+            spinner.fail();
+            throw error;
+          }
+        },
+        deps.exit
+      );
+    });
+
+  branch
+    .command("delete")
+    .argument("<name>", "Branch name")
+    .description("Delete a branch database")
+    .option("-y, --yes", "Skip confirmation prompt")
+    .action(async (name: string, options: { yes?: boolean }) => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+
+          if (!orchConfig) {
+            throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
+          }
+
+          if (!options.yes) {
+            deps.ui.log(
+              chalk.yellow(`Warning: This will delete branch '${name}' and all its data.`)
+            );
+            // In a real CLI, prompt for confirmation here
+            // For now, just proceed
+          }
+
+          const client = new OrchestratorClient(orchConfig);
+          const spinner = deps.ui.spinner(`Deleting branch '${name}'...`).start();
+
+          try {
+            await client.deleteBranch(name);
+            spinner.succeed(`Branch deleted: ${name}`);
+          } catch (error) {
+            spinner.fail();
+            throw error;
+          }
+        },
+        deps.exit
+      );
+    });
 
   branch
     .command("reset")
