@@ -4,5 +4,12 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "types": "src/index.ts"
+  "types": "src/index.ts",
+  "description": "TypeScript SDK for FlowDB orchestrator API with retry logic and error handling",
+  "dependencies": {
+    "@flowdb/orchestrator": "0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1"
+  }
 }

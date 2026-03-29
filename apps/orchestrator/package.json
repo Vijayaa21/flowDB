@@ -5,6 +5,16 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts/index.ts",
+      "default": "./src/contracts/index.ts"
+    }
+  },
   "scripts": {
     "test": "vitest run --config vitest.config.ts"
   },
