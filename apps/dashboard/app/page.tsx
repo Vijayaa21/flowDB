@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { signOut, useSession } from "next-auth/react";
+import { toast } from "sonner";
 
-import { api, type Branch } from "../lib/api";
+import { api, readDashboardConfig, saveDashboardConfig, type Branch, type DashboardConfig } from "../lib/api";
 import { queryKeys } from "../lib/query-keys";
 
 type SectionKey = "branches" | "settings";
 type ThemeMode = "light" | "dark" | "system";
-
-const orchestratorUrl = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3000";
 
 function statusUpper(status: string | undefined): string {
   return (status ?? "UNKNOWN").toUpperCase();
@@ -79,12 +78,16 @@ function BranchHealthFeed({
   data,
   isLoading,
   isError,
-  onRetry
+  deletingBranch,
+  onRetry,
+  onTeardown
 }: {
   data: Branch[];
   isLoading: boolean;
   isError: boolean;
+  deletingBranch: string | null;
   onRetry: () => void;
+  onTeardown: (name: string) => Promise<void>;
 }) {
   if (isLoading) {
     return <BranchFeedSkeleton />;
@@ -127,6 +130,16 @@ function BranchHealthFeed({
             <StatusBadge status={branch.status} />
           </div>
           <p className="mt-2 text-xs text-(--gh-fg-muted)">Updated {timeAgo(branch.updatedAt)}</p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => void onTeardown(branch.branchName)}
+              disabled={deletingBranch === branch.branchName}
+              className="rounded-md border border-(--gh-border-default) px-2 py-1 text-xs text-(--gh-fg-muted) hover:bg-(--gh-canvas-subtle) hover:text-(--gh-fg-default) disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deletingBranch === branch.branchName ? "Closing..." : "Close Branch"}
+            </button>
+          </div>
         </article>
       ))}
     </div>
@@ -135,22 +148,30 @@ function BranchHealthFeed({
 
 export default function HomePage() {
   const { data: session } = useSession();
+  const [config, setConfig] = useState<DashboardConfig>(() => readDashboardConfig());
+  const [draftConfig, setDraftConfig] = useState<DashboardConfig>(() => readDashboardConfig());
   const [activeSection, setActiveSection] = useState<SectionKey>("branches");
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [now, setNow] = useState(Date.now());
+  const [deletingBranch, setDeletingBranch] = useState<string | null>(null);
 
   const branchesQuery = useQuery({
-    queryKey: queryKeys.branches,
-    queryFn: api.branches.list,
+    queryKey: queryKeys.branches(config),
+    queryFn: () => api.branches.list(config),
     refetchInterval: 30000
   });
 
   const healthQuery = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: api.health.check,
+    queryKey: queryKeys.health(config),
+    queryFn: () => api.health.check(config),
     refetchInterval: 60000
   });
+
+  useEffect(() => {
+    const stored = readDashboardConfig();
+    setConfig(stored);
+    setDraftConfig(stored);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -165,7 +186,6 @@ export default function HomePage() {
       : "system";
     const shouldUseDark = mode === "system" ? prefersDark : mode === "dark";
     setThemeMode(mode);
-    setDarkModeEnabled(shouldUseDark);
     document.documentElement.classList.toggle("dark", shouldUseDark);
   }, []);
 
@@ -200,9 +220,39 @@ export default function HomePage() {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const nextDark = mode === "system" ? prefersDark : mode === "dark";
     setThemeMode(mode);
-    setDarkModeEnabled(nextDark);
     document.documentElement.classList.toggle("dark", nextDark);
     window.localStorage.setItem("flowdb-theme", mode);
+  };
+
+  const handleSaveSettings = async () => {
+    const orchestratorValue = draftConfig.orchestratorUrl.trim();
+    if (!orchestratorValue) {
+      toast.error("Orchestrator URL is required.");
+      return;
+    }
+
+    const nextConfig = saveDashboardConfig({
+      ...draftConfig,
+      orchestratorUrl: orchestratorValue
+    });
+
+    setConfig(nextConfig);
+    setDraftConfig(nextConfig);
+    toast.success("Dashboard settings saved.");
+    await Promise.all([branchesQuery.refetch(), healthQuery.refetch()]);
+  };
+
+  const handleTeardown = async (name: string) => {
+    setDeletingBranch(name);
+    try {
+      await api.branches.teardown(name, config);
+      toast.success(`Branch ${name} closed.`);
+      await branchesQuery.refetch();
+    } catch {
+      toast.error(`Failed to close branch ${name}.`);
+    } finally {
+      setDeletingBranch(null);
+    }
   };
 
   return (
@@ -278,7 +328,7 @@ export default function HomePage() {
               </span>
             </div>
             {!isConnected ? (
-              <p className="mb-2 text-xs text-(--gh-fg-muted)">Check {orchestratorUrl}</p>
+              <p className="mb-2 text-xs text-(--gh-fg-muted)">Check {config.orchestratorUrl}</p>
             ) : null}
 
             <button
@@ -310,7 +360,7 @@ export default function HomePage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h1 className="m-0 text-xl font-semibold text-(--gh-fg-default)">FlowDB Dashboard</h1>
-                <p className="mt-1 text-sm text-(--gh-fg-muted)">Orchestrator: {orchestratorUrl}</p>
+                <p className="mt-1 text-sm text-(--gh-fg-muted)">Orchestrator: {config.orchestratorUrl}</p>
               </div>
               <div className="flex items-center gap-2">
                 <p className="text-xs text-(--gh-fg-muted)">Last updated {lastUpdatedSeconds}s ago</p>
@@ -346,15 +396,79 @@ export default function HomePage() {
                 data={branches}
                 isLoading={branchesQuery.isLoading}
                 isError={branchesQuery.isError}
+                deletingBranch={deletingBranch}
                 onRetry={() => {
                   void branchesQuery.refetch();
                 }}
+                onTeardown={handleTeardown}
               />
             </section>
           ) : (
             <section className="mt-6 rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-5">
               <h2 className="m-0 text-base font-medium text-(--gh-fg-default)">Settings</h2>
-              <p className="mt-2 text-sm text-(--gh-fg-muted)">Choose the dashboard appearance theme.</p>
+              <p className="mt-2 text-sm text-(--gh-fg-muted)">Configure project/environment and dashboard appearance.</p>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <label className="text-sm text-(--gh-fg-muted)">
+                  Orchestrator URL
+                  <input
+                    type="text"
+                    value={draftConfig.orchestratorUrl}
+                    onChange={(event) =>
+                      setDraftConfig((current) => ({ ...current, orchestratorUrl: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
+                    placeholder="http://localhost:3000"
+                  />
+                </label>
+                <label className="text-sm text-(--gh-fg-muted)">
+                  Environment
+                  <input
+                    type="text"
+                    value={draftConfig.environment}
+                    onChange={(event) =>
+                      setDraftConfig((current) => ({ ...current, environment: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
+                    placeholder="local"
+                  />
+                </label>
+                <label className="text-sm text-(--gh-fg-muted)">
+                  Organization Slug
+                  <input
+                    type="text"
+                    value={draftConfig.orgSlug}
+                    onChange={(event) =>
+                      setDraftConfig((current) => ({ ...current, orgSlug: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
+                    placeholder="acme"
+                  />
+                </label>
+                <label className="text-sm text-(--gh-fg-muted)">
+                  Project Slug
+                  <input
+                    type="text"
+                    value={draftConfig.projectSlug}
+                    onChange={(event) =>
+                      setDraftConfig((current) => ({ ...current, projectSlug: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
+                    placeholder="flowdb"
+                  />
+                </label>
+              </div>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSaveSettings();
+                  }}
+                  className="rounded-lg bg-(--gh-accent-emphasis) px-3 py-2 text-sm text-white hover:brightness-110"
+                >
+                  Save Settings
+                </button>
+              </div>
+              <p className="mt-4 text-sm text-(--gh-fg-muted)">Choose the dashboard appearance theme.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {([
                   { key: "light", label: "Light" },

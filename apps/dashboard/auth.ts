@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig, NextAuthResult } from "next-auth";
 import GitHub from "next-auth/providers/github";
-import { createHmac } from "node:crypto";
+import { createHmac } from "crypto";
 
 /*
 GitHub OAuth App setup for local FlowDB development:
