@@ -2,86 +2,90 @@ import { performance } from "node:perf_hooks";
 import { Client, type ClientConfig } from "pg";
 
 import { ForkTimeoutError } from "./errors";
+import type { BranchInfo, ForkResult } from "./types";
 
-type Logger = Pick<Console, "info">;
+const FORK_TIMEOUT_MS = 500;
 
-export type PostgreSQLForkEngineOptions = {
-  branchPrefix?: string;
-  forkTimeoutMs?: number;
-  logger?: Logger;
+type BranchRow = {
+  name: string;
+  size: string | number;
+  created_at: Date | string;
 };
 
-export class PostgreSQLForkEngine {
-  private readonly branchPrefix: string;
-  private readonly forkTimeoutMs: number;
-  private readonly logger: Logger;
-
-  public constructor(options?: PostgreSQLForkEngineOptions) {
-    this.branchPrefix = options?.branchPrefix ?? "flowdb_branch";
-    this.forkTimeoutMs = options?.forkTimeoutMs ?? 500;
-    this.logger = options?.logger ?? console;
-  }
-
-  public async fork(sourceDatabaseUrl: string, branchName: string): Promise<string> {
-    const sourceUrl = new URL(sourceDatabaseUrl);
-    const sourceDatabaseName = this.getDatabaseName(sourceUrl);
-    const branchDatabaseName = this.buildBranchDatabaseName(sourceDatabaseName, branchName);
+export class ForkEngine {
+  public async fork(sourceDatabaseUrl: string, branchName: string): Promise<ForkResult> {
+    const sourceDatabaseName = this.getDatabaseName(new URL(sourceDatabaseUrl));
+    const branchDatabaseName = this.buildBranchDatabaseName(branchName);
     const adminUrl = this.toMaintenanceDatabaseUrl(sourceDatabaseUrl);
-    const adminClient = await this.connect(adminUrl);
     const startedAt = performance.now();
+    const forkedAt = new Date();
+    const client = await this.connect(adminUrl);
 
     try {
-      await adminClient.query(
+      await client.query(
         `CREATE DATABASE ${this.quoteIdentifier(branchDatabaseName)} TEMPLATE ${this.quoteIdentifier(sourceDatabaseName)}`
       );
     } finally {
-      await adminClient.end();
+      await client.end();
     }
 
     const durationMs = performance.now() - startedAt;
-    this.logger.info(
-      `[FlowDB] fork source=${sourceDatabaseName} branch=${branchDatabaseName} durationMs=${durationMs.toFixed(2)}`
-    );
-
+    console.info(`[FlowDB] fork branch=${branchDatabaseName} durationMs=${durationMs.toFixed(2)}`);
     const branchDatabaseUrl = this.withDatabaseName(sourceDatabaseUrl, branchDatabaseName);
 
-    if (durationMs > this.forkTimeoutMs) {
+    if (durationMs > FORK_TIMEOUT_MS) {
       await this.teardown(branchDatabaseUrl);
-      throw new ForkTimeoutError(durationMs, this.forkTimeoutMs);
+      throw new ForkTimeoutError(durationMs, FORK_TIMEOUT_MS);
     }
 
-    return branchDatabaseUrl;
+    return {
+      branchDatabaseUrl,
+      branchName,
+      forkedAt,
+      durationMs
+    };
   }
 
   public async teardown(branchDatabaseUrl: string): Promise<void> {
-    const branchUrl = new URL(branchDatabaseUrl);
-    const branchDatabaseName = this.getDatabaseName(branchUrl);
+    const databaseName = this.getDatabaseName(new URL(branchDatabaseUrl));
     const adminUrl = this.toMaintenanceDatabaseUrl(branchDatabaseUrl);
-    const adminClient = await this.connect(adminUrl);
+    const client = await this.connect(adminUrl);
 
     try {
-      await adminClient.query(
-        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
-        [branchDatabaseName]
+      await client.query(
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
+        [databaseName]
       );
-      await adminClient.query(`DROP DATABASE IF EXISTS ${this.quoteIdentifier(branchDatabaseName)}`);
+      await client.query(`DROP DATABASE IF EXISTS ${this.quoteIdentifier(databaseName)}`);
     } finally {
-      await adminClient.end();
+      await client.end();
     }
   }
 
-  public async listBranches(hostUrl: string): Promise<string[]> {
+  public async listBranches(hostUrl: string): Promise<BranchInfo[]> {
     const adminUrl = this.toMaintenanceDatabaseUrl(hostUrl);
-    const adminClient = await this.connect(adminUrl);
+    const client = await this.connect(adminUrl);
 
     try {
-      const result = await adminClient.query<{ datname: string }>(
-        "SELECT datname FROM pg_database WHERE datname LIKE $1 ORDER BY datname ASC",
-        [`${this.branchPrefix}_%`]
+      const result = await client.query<BranchRow>(
+        `
+        SELECT
+          d.datname AS name,
+          pg_database_size(d.datname) AS size,
+          COALESCE((pg_stat_file(format('base/%s/PG_VERSION', d.oid), true)).modification, NOW()) AS created_at
+        FROM pg_database d
+        WHERE d.datname LIKE 'flowdb_%'
+        ORDER BY d.datname ASC
+        `
       );
-      return result.rows.map((row) => row.datname);
+
+      return result.rows.map((row) => ({
+        name: row.name,
+        size: Number(row.size),
+        createdAt: new Date(row.created_at)
+      }));
     } finally {
-      await adminClient.end();
+      await client.end();
     }
   }
 
@@ -127,23 +131,23 @@ export class PostgreSQLForkEngine {
     return url.toString();
   }
 
-  private buildBranchDatabaseName(sourceDatabaseName: string, branchName: string): string {
-    const sanitizedSource = this.sanitizeName(sourceDatabaseName);
-    const sanitizedBranch = this.sanitizeName(branchName);
-    const suffix = Date.now().toString(36);
-
-    return `${this.branchPrefix}_${sanitizedSource}_${sanitizedBranch}_${suffix}`.slice(0, 63);
+  private buildBranchDatabaseName(branchName: string): string {
+    const sanitized = this.sanitizeName(branchName);
+    return `flowdb_${sanitized}`.slice(0, 63);
   }
 
   private sanitizeName(value: string): string {
-    return value
+    const sanitized = value
       .toLowerCase()
       .replace(/[^a-z0-9_]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 20);
+      .replace(/^_+|_+$/g, "");
+
+    return sanitized || "branch";
   }
 
   private quoteIdentifier(identifier: string): string {
     return `"${identifier.replace(/"/g, '""')}"`;
   }
 }
+
+export class PostgreSQLForkEngine extends ForkEngine {}

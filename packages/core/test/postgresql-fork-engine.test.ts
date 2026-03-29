@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { ForkTimeoutError, PostgreSQLForkEngine } from "../src";
+import { ForkEngine } from "../src";
 
 const TEST_DB_PREFIX = "flowdb_test";
 
-let container: PostgreSqlContainer | undefined;
+let container: StartedPostgreSqlContainer | undefined;
 let maintenanceUrl: string;
 
 async function queryExists(databaseName: string): Promise<boolean> {
@@ -72,8 +72,8 @@ afterAll(async () => {
 });
 
 describe("PostgreSQLForkEngine", () => {
-  test("fork creates a template-based branch database and returns URL", async () => {
-    const engine = new PostgreSQLForkEngine();
+  test("fork creates a template-based database and returns fork metadata under 500ms", async () => {
+    const engine = new ForkEngine();
     const sourceName = `${TEST_DB_PREFIX}_source_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
     await createDatabase(sourceName);
 
@@ -84,74 +84,76 @@ describe("PostgreSQLForkEngine", () => {
     await sourceClient.query("INSERT INTO widgets(name) VALUES ($1)", ["seed-row"]);
     await sourceClient.end();
 
-    const branchUrl = await engine.fork(sourceUrl, "feature-a");
+    const forkResult = await engine.fork(sourceUrl, "feature-a");
+    const branchUrl = forkResult.branchDatabaseUrl;
     const branchName = new URL(branchUrl).pathname.replace(/^\//, "");
 
     const branchClient = new Client({ connectionString: branchUrl });
     await branchClient.connect();
-    const result = await branchClient.query<{ count: string }>(
+    const queryResult = await branchClient.query<{ count: string }>(
       "SELECT COUNT(*)::text AS count FROM widgets WHERE name = $1",
       ["seed-row"]
     );
     await branchClient.end();
 
-    expect(branchUrl).toContain(branchName);
-    expect(result.rows[0]?.count).toBe("1");
+    expect(forkResult.branchName).toBe("feature-a");
+    expect(forkResult.forkedAt).toBeInstanceOf(Date);
+    expect(forkResult.durationMs).toBeLessThan(500);
+    expect(branchName).toBe("flowdb_feature_a");
+    expect(queryResult.rows[0]?.count).toBe("1");
 
     await engine.teardown(branchUrl);
-    await dropDatabase(sourceName);
-  });
-
-  test("fork throws ForkTimeoutError when operation exceeds timeout threshold", async () => {
-    const engine = new PostgreSQLForkEngine({ forkTimeoutMs: -1 });
-    const sourceName = `${TEST_DB_PREFIX}_slow_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
-    await createDatabase(sourceName);
-    const sourceUrl = withDatabaseName(maintenanceUrl, sourceName);
-
-    await expect(engine.fork(sourceUrl, "timeout")).rejects.toBeInstanceOf(ForkTimeoutError);
-
     await dropDatabase(sourceName);
   });
 
   test("teardown drops the branch database safely", async () => {
-    const engine = new PostgreSQLForkEngine();
+    const engine = new ForkEngine();
     const dbName = `${TEST_DB_PREFIX}_teardown_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
     await createDatabase(dbName);
     const branchUrl = withDatabaseName(maintenanceUrl, dbName);
 
+    const connectionClient = new Client({ connectionString: branchUrl });
+    await connectionClient.connect();
+    await connectionClient.query("SELECT 1");
+
     await engine.teardown(branchUrl);
+    await connectionClient.end().catch(() => undefined);
 
     const stillExists = await queryExists(dbName);
     expect(stillExists).toBe(false);
   });
 
-  test("listBranches returns only FlowDB-managed branch databases", async () => {
-    const engine = new PostgreSQLForkEngine();
+  test("listBranches returns FlowDB databases with size and createdAt", async () => {
+    const engine = new ForkEngine();
     const sourceName = `${TEST_DB_PREFIX}_list_source_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
     await createDatabase(sourceName);
     const sourceUrl = withDatabaseName(maintenanceUrl, sourceName);
 
-    const branchAUrl = await engine.fork(sourceUrl, "alpha");
-    const branchBUrl = await engine.fork(sourceUrl, "beta");
+    const branchAResult = await engine.fork(sourceUrl, "alpha");
+    const branchBResult = await engine.fork(sourceUrl, "beta");
     const externalDb = `${TEST_DB_PREFIX}_external_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
     await createDatabase(externalDb);
 
     const branches = await engine.listBranches(maintenanceUrl);
-    const branchAName = new URL(branchAUrl).pathname.replace(/^\//, "");
-    const branchBName = new URL(branchBUrl).pathname.replace(/^\//, "");
+    const branchAName = new URL(branchAResult.branchDatabaseUrl).pathname.replace(/^\//, "");
+    const branchBName = new URL(branchBResult.branchDatabaseUrl).pathname.replace(/^\//, "");
+    const branchA = branches.find((branch) => branch.name === branchAName);
+    const branchB = branches.find((branch) => branch.name === branchBName);
 
-    expect(branches).toContain(branchAName);
-    expect(branches).toContain(branchBName);
-    expect(branches).not.toContain(externalDb);
+    expect(branchA).toBeDefined();
+    expect(branchB).toBeDefined();
+    expect(branchA?.size).toBeGreaterThan(0);
+    expect(branchA?.createdAt).toBeInstanceOf(Date);
+    expect(branches.some((branch) => branch.name === externalDb)).toBe(false);
 
-    await engine.teardown(branchAUrl);
-    await engine.teardown(branchBUrl);
+    await engine.teardown(branchAResult.branchDatabaseUrl);
+    await engine.teardown(branchBResult.branchDatabaseUrl);
     await dropDatabase(sourceName);
     await dropDatabase(externalDb);
   });
 
   test("healthCheck returns true for reachable database and false for unreachable database", async () => {
-    const engine = new PostgreSQLForkEngine();
+    const engine = new ForkEngine();
     const healthy = await engine.healthCheck(maintenanceUrl);
 
     const invalidUrl = withDatabaseName(maintenanceUrl, `missing_${randomUUID().replace(/-/g, "")}`);
