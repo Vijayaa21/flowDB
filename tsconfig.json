@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "preserve"
   },
   "include": ["packages/**/*.ts", "apps/**/*.ts", "apps/**/*.tsx", "tests/**/*.ts"]
 }

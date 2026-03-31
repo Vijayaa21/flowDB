@@ -135,7 +135,7 @@ function renderTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((header, idx) =>
     Math.max(header.length, ...rows.map((row) => (row[idx] ?? "").length))
   );
-  const renderRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i], " ")).join("  ");
+  const renderRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i] ?? 0, " ")).join("  ");
   return [renderRow(headers), renderRow(widths.map((w) => "-".repeat(w))), ...rows.map(renderRow)].join(
     "\n"
   );
@@ -205,12 +205,14 @@ async function resolveBranchDbName(
   inputName: string
 ): Promise<string> {
   const branches = await engine.listBranches(hostUrl);
-  if (branches.includes(inputName)) {
+  const branchNames = branches.map((branch) => branch.name);
+
+  if (branchNames.includes(inputName)) {
     return inputName;
   }
 
   const sanitizedInput = inputName.toLowerCase().replace(/[^a-z0-9_]+/g, "_");
-  const fuzzy = branches.find((name) => name.includes(`_${sanitizedInput}_`));
+  const fuzzy = branchNames.find((name) => name.includes(`_${sanitizedInput}_`));
   if (fuzzy) {
     return fuzzy;
   }
@@ -450,15 +452,16 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
         }
 
         // Fallback to local fork engine
-        const names = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
+        const branches = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
 
-        for (const name of names) {
+        for (const branch of branches) {
+          const name = branch.name;
           const url = withDatabaseName(config.sourceDatabaseUrl, name);
           const healthy = await deps.forkEngine.healthCheck(url);
           rows.push([
             name,
             healthy ? chalk.green("active") : chalk.red("unreachable"),
-            chalk.cyan(formatAge(name))
+            chalk.cyan(formatAge(branch.name))
           ]);
         }
 

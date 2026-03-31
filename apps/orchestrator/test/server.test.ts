@@ -138,7 +138,12 @@ describe("orchestrator routes", () => {
     forkEngine: {
       async fork(_source, branchName) {
         forkCalls.push(branchName);
-        return `postgres://branch/${branchName}`;
+        return {
+          branchDatabaseUrl: `postgres://branch/${branchName}`,
+          branchName,
+          forkedAt: new Date(),
+          durationMs: 10
+        };
       },
       async teardown(branchDatabaseUrl) {
         teardownCalls.push(branchDatabaseUrl);
@@ -152,7 +157,12 @@ describe("orchestrator routes", () => {
     },
     migrationRunner: async (_projectRoot, branchDatabaseUrl) => {
       migrationRuns.push(branchDatabaseUrl);
-      return { applied: [] };
+      return {
+        applied: [],
+        pending: [],
+        schemaDiffSummary: "No migrations were applied.",
+        conflicts: []
+      };
     },
     vercel: {
       async injectDeploymentDatabaseUrl(deploymentId, databaseUrl) {
@@ -201,6 +211,59 @@ describe("orchestrator routes", () => {
 
     const branches = await branchRepo.listActive("12345");
     expect(branches.some((branch) => branch.branchName === "feature/api")).toBe(true);
+  });
+
+  test("POST /webhooks/github re-forks on pull_request.reopened for previously closed branch", async () => {
+    await branchRepo.upsert("12345", {
+      prNumber: 150,
+      branchName: "feature/reopen",
+      branchDatabaseUrl: "postgres://branch/old-feature/reopen",
+      status: "closed"
+    });
+
+    const payload = {
+      action: "reopened",
+      pull_request: { number: 150, head: { ref: "feature/reopen" } }
+    };
+
+    const response = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    expect(response.status).toBe(200);
+    expect(forkCalls).toContain("feature/reopen");
+
+    const reopened = await branchRepo.getByBranchName("12345", "feature/reopen");
+    expect(reopened?.status).toBe("active");
+    expect(reopened?.branchDatabaseUrl).toBe("postgres://branch/feature/reopen");
+  });
+
+  test("POST /webhooks/github ignores duplicate delivery for active branch", async () => {
+    await branchRepo.upsert("12345", {
+      prNumber: 160,
+      branchName: "feature/dupe",
+      branchDatabaseUrl: "postgres://branch/feature/dupe",
+      status: "active"
+    });
+
+    const payload = {
+      action: "opened",
+      pull_request: { number: 160, head: { ref: "feature/dupe" } }
+    };
+
+    const response = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    expect(response.status).toBe(200);
+    const duplicateForkCalls = forkCalls.filter((name) => name === "feature/dupe");
+    expect(duplicateForkCalls.length).toBe(0);
   });
 
   test("POST /webhooks/github runs migrations on push", async () => {

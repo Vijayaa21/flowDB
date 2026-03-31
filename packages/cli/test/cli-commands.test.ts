@@ -1,38 +1,27 @@
+import { describe, expect, test } from "vitest";
+
 import { createProgram } from "../src/program";
 
-// Verify that all the new Step 4 commands are defined
-const program = createProgram();
+describe("cli command registration", () => {
+  test("registers required top-level commands", () => {
+    const program = createProgram();
+    const commands = program.commands.map((cmd) => cmd.name());
 
-const commands = program.commands.map((cmd) => cmd.name());
+    expect(commands).toContain("login");
+    expect(commands).toContain("health");
+    expect(commands).toContain("branch");
+  });
 
-console.log("Registered CLI commands:");
-console.log(commands);
+  test("registers required branch subcommands", () => {
+    const program = createProgram();
+    const branchCommand = program.commands.find((cmd) => cmd.name() === "branch");
 
-// Verify new commands exist
-const requiredCommands = ["login", "health"];
-const missingCommands = requiredCommands.filter((cmd) => !commands.includes(cmd));
+    expect(branchCommand).toBeDefined();
+    const subcommands = branchCommand?.commands.map((cmd) => cmd.name()) ?? [];
 
-if (missingCommands.length > 0) {
-  console.error(`Missing commands: ${missingCommands.join(", ")}`);
-  process.exit(1);
-}
-
-// Verify branch subcommands
-const branchCommand = program.commands.find((cmd) => cmd.name() === "branch");
-if (branchCommand) {
-  const branchSubcommands = branchCommand.commands.map((cmd) => cmd.name());
-  console.log("Branch subcommands:", branchSubcommands);
-
-  const requiredSubcommands = ["list", "create", "delete", "reset"];
-  const missingSubcommands = requiredSubcommands.filter((cmd) => !branchSubcommands.includes(cmd));
-
-  if (missingSubcommands.length > 0) {
-    console.error(`Missing branch subcommands: ${missingSubcommands.join(", ")}`);
-    process.exit(1);
-  }
-} else {
-  console.error("Branch command not found");
-  process.exit(1);
-}
-
-console.log("✓ All Step 4 CLI commands are properly registered");
+    expect(subcommands).toContain("list");
+    expect(subcommands).toContain("create");
+    expect(subcommands).toContain("delete");
+    expect(subcommands).toContain("reset");
+  });
+});

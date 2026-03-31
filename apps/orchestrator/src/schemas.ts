@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const githubPullRequestSchema = z.object({
-  action: z.enum(["opened", "closed"]),
+  action: z.enum(["opened", "reopened", "closed"]),
   pull_request: z.object({
     number: z.number().int(),
     head: z.object({
@@ -30,7 +30,7 @@ export const vercelWebhookSchema = z.object({
         .object({
           id: z.string().min(1),
           target: z.string().optional(),
-          meta: z.record(z.string()).optional()
+          meta: z.record(z.string(), z.string()).optional()
         })
         .optional(),
       git: z

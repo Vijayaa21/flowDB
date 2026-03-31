@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { PostgreSQLForkEngine } from "@flowdb/core";
+import { PostgreSQLForkEngine, type BranchInfo, type ForkResult } from "@flowdb/core";
 
 import {
   NoopGithubCommentPublisher,
@@ -20,9 +20,9 @@ import { getConfig } from "./config";
 import { authMiddleware } from "./middleware/auth";
 
 type ForkEngine = {
-  fork(sourceDatabaseUrl: string, branchName: string): Promise<string>;
+  fork(sourceDatabaseUrl: string, branchName: string): Promise<ForkResult>;
   teardown(branchDatabaseUrl: string): Promise<void>;
-  listBranches(hostUrl: string): Promise<string[]>;
+  listBranches(hostUrl: string): Promise<BranchInfo[]>;
   healthCheck(databaseUrl: string): Promise<boolean>;
 };
 
@@ -193,8 +193,17 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
       const payload = parsed.data;
       const githubId = c.get("githubId") as string;
-      if (payload.action === "opened") {
+      if (payload.action === "opened" || payload.action === "reopened") {
         deps.scheduleTask(async () => {
+          const byPr = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
+          const byBranch = await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref);
+          const existing = byPr ?? byBranch;
+
+          // Ignore duplicate delivery for already-active branch records.
+          if (existing && existing.status !== "closed") {
+            return;
+          }
+
           const branchDatabaseUrl = await deps.forkEngine.fork(
             deps.sourceDatabaseUrl,
             payload.pull_request.head.ref
@@ -202,7 +211,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           await deps.branches.upsert(githubId, {
             prNumber: payload.pull_request.number,
             branchName: payload.pull_request.head.ref,
-            branchDatabaseUrl,
+            branchDatabaseUrl: branchDatabaseUrl.branchDatabaseUrl,
             status: "active"
           });
         });

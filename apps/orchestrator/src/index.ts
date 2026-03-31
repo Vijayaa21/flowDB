@@ -16,8 +16,12 @@ export default handle(app);
 
 export async function startOrchestrator(): Promise<void> {
 	const config = getConfig();
+	const migrationDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
+	if (!migrationDatabaseUrl) {
+		throw new Error("DATABASE_URL or SOURCE_DATABASE_URL is required to run migrations.");
+	}
 	const appliedMigrations = await runPendingMigrations({
-		databaseUrl: config.databaseUrl,
+		databaseUrl: migrationDatabaseUrl,
 		migrationsDir: config.migrationsDir
 	});
 
