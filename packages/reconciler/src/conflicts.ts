@@ -72,17 +72,17 @@ function collectAlterColumns(statement: Record<string, AstNode>): Set<string> {
       continue;
     }
 
-    const fromColumn = extractColumnName(entry.column);
+    const fromColumn = extractColumnName(entry.column ?? null);
     if (fromColumn) {
       columns.add(fromColumn);
     }
 
-    const fromOldColumn = extractColumnName(entry.old_column);
+    const fromOldColumn = extractColumnName(entry.old_column ?? null);
     if (fromOldColumn) {
       columns.add(fromOldColumn);
     }
 
-    const fromNewColumn = extractColumnName(entry.new_column);
+    const fromNewColumn = extractColumnName(entry.new_column ?? null);
     if (fromNewColumn) {
       columns.add(fromNewColumn);
     }
@@ -114,7 +114,7 @@ export function getAlteredColumns(sql: string): ColumnRef[] {
       continue;
     }
 
-    const table = getTableName(statement.table);
+    const table = getTableName(statement.table ?? null);
     if (!table) {
       continue;
     }
@@ -184,7 +184,7 @@ export function extractCreatedTables(sql: string): Set<string> {
     if (!isRecord(statement) || statement.type !== "create") {
       continue;
     }
-    const table = getTableName(statement.table);
+    const table = getTableName(statement.table ?? null);
     if (table) {
       created.add(table);
     }
@@ -207,7 +207,7 @@ export function extractTouchedTables(sql: string): Set<string> {
     if (!isRecord(statement)) {
       continue;
     }
-    const table = getTableName(statement.table);
+    const table = getTableName(statement.table ?? null);
     if (table) {
       touched.add(table);
     }

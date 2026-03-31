@@ -11,6 +11,8 @@ import { PostgreSQLForkEngine as ForkEngine } from "@flowdb/core";
 
 import { runCli } from "../src/program";
 
+const describeContainer = process.env.RUN_CONTAINER_TESTS === "1" ? describe : describe.skip;
+
 type SpinnerMock = {
   start: () => SpinnerMock;
   stop: () => SpinnerMock;
@@ -64,8 +66,8 @@ async function writeBaseFixture(cwd: string, databaseUrl: string): Promise<void>
   await writeFile(path.join(cwd, ".flowdb.config.json"), JSON.stringify({ orm: "raw", sourceDatabaseUrl: databaseUrl }));
 }
 
-describe("flowdb cli commands", () => {
-  let container: PostgreSqlContainer;
+describeContainer("flowdb cli commands", () => {
+  let container: Awaited<ReturnType<PostgreSqlContainer["start"]>>;
   let maintenanceUrl: string;
   let sourceDatabaseUrl: string;
   let tmpRoot: string;
@@ -81,7 +83,7 @@ describe("flowdb cli commands", () => {
     maintenanceUrl = container.getConnectionUri();
     sourceDatabaseUrl = await setupMainDb(maintenanceUrl);
     tmpRoot = await mkdtemp(path.join(os.tmpdir(), "flowdb-cli-"));
-    testForkEngine = new ForkEngine({ forkTimeoutMs: 5000 });
+    testForkEngine = new ForkEngine();
   });
 
   afterAll(async () => {
@@ -143,13 +145,13 @@ describe("flowdb cli commands", () => {
     await mkdir(cwd, { recursive: true });
     await writeBaseFixture(cwd, sourceDatabaseUrl);
 
-    const firstBranchUrl = await testForkEngine.fork(sourceDatabaseUrl, "reset-test");
-    const firstName = new URL(firstBranchUrl).pathname.replace(/^\//, "");
+    const firstBranch = await testForkEngine.fork(sourceDatabaseUrl, "reset-test");
+    const firstName = new URL(firstBranch.branchDatabaseUrl).pathname.replace(/^\//, "");
 
     await run(["branch", "reset", firstName], cwd);
 
-    const names = await testForkEngine.listBranches(sourceDatabaseUrl);
-    expect(names.some((name) => name.includes("reset_test"))).toBe(true);
+    const branches = await testForkEngine.listBranches(sourceDatabaseUrl);
+    expect(branches.some((branch) => branch.name.includes("reset_test"))).toBe(true);
   });
 
   test("diff renders schema diff table", async () => {
@@ -157,10 +159,10 @@ describe("flowdb cli commands", () => {
     await mkdir(cwd, { recursive: true });
     await writeBaseFixture(cwd, sourceDatabaseUrl);
 
-    const branchUrl = await testForkEngine.fork(sourceDatabaseUrl, "diff-test");
-    const branchName = new URL(branchUrl).pathname.replace(/^\//, "");
+    const branch = await testForkEngine.fork(sourceDatabaseUrl, "diff-test");
+    const branchName = new URL(branch.branchDatabaseUrl).pathname.replace(/^\//, "");
 
-    const branchClient = new Client({ connectionString: branchUrl });
+    const branchClient = new Client({ connectionString: branch.branchDatabaseUrl });
     await branchClient.connect();
     await branchClient.query(
       "CREATE TABLE IF NOT EXISTS flowdb_applied_migrations (id TEXT PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
@@ -182,17 +184,17 @@ describe("flowdb cli commands", () => {
     await mkdir(cwd, { recursive: true });
     await writeBaseFixture(cwd, sourceDatabaseUrl);
 
-    const branchUrl = await testForkEngine.fork(sourceDatabaseUrl, "seed-test");
-    const branchName = new URL(branchUrl).pathname.replace(/^\//, "");
+    const branch = await testForkEngine.fork(sourceDatabaseUrl, "seed-test");
+    const branchName = new URL(branch.branchDatabaseUrl).pathname.replace(/^\//, "");
 
-    const branchClient = new Client({ connectionString: branchUrl });
+    const branchClient = new Client({ connectionString: branch.branchDatabaseUrl });
     await branchClient.connect();
     await branchClient.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT)");
     await branchClient.end();
 
     await run(["seed", branchName], cwd);
 
-    const verifyClient = new Client({ connectionString: branchUrl });
+    const verifyClient = new Client({ connectionString: branch.branchDatabaseUrl });
     await verifyClient.connect();
     const result = await verifyClient.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users");
     await verifyClient.end();

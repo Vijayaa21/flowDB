@@ -23,6 +23,9 @@ function verifyJwt(token: string, secret: string): JwtPayload | null {
   }
 
   const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    return null;
+  }
   const data = `${encodedHeader}.${encodedPayload}`;
   const expected = base64UrlEncode(createHmac("sha256", secret).update(data).digest());
 
