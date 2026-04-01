@@ -201,6 +201,7 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-open-101")
       .set("x-hub-signature-256", signature("test-secret", payload))
       .send(payload);
     const durationMs = Date.now() - startedAt;
@@ -230,6 +231,7 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-reopen-150")
       .set("x-hub-signature-256", signature("test-secret", payload))
       .send(payload);
 
@@ -258,6 +260,7 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-dupe-160")
       .set("x-hub-signature-256", signature("test-secret", payload))
       .send(payload);
 
@@ -279,6 +282,7 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "push")
+      .set("x-github-delivery", "del-push-200")
       .set("x-hub-signature-256", signature("test-secret", payload))
       .send(payload);
 
@@ -303,6 +307,7 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-close-300")
       .set("x-hub-signature-256", signature("test-secret", payload))
       .send(payload);
 
@@ -384,9 +389,38 @@ describe("orchestrator routes", () => {
       .post("/webhooks/github")
       .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-invalid-999")
       .set("x-hub-signature-256", "sha256=invalid")
       .send(payload);
 
     expect(response.status).toBe(401);
   });
+    
+    test("POST /webhooks/github ignores replayed delivery ids", async () => {
+      const payload = {
+        action: "opened",
+        pull_request: { number: 610, head: { ref: "feature/replay" } }
+      };
+    
+      const first = await request(server)
+        .post("/webhooks/github")
+        .set("authorization", authHeader)
+        .set("x-github-event", "pull_request")
+        .set("x-github-delivery", "del-replay-610")
+        .set("x-hub-signature-256", signature("test-secret", payload))
+        .send(payload);
+    
+      const second = await request(server)
+        .post("/webhooks/github")
+        .set("authorization", authHeader)
+        .set("x-github-event", "pull_request")
+        .set("x-github-delivery", "del-replay-610")
+        .set("x-hub-signature-256", signature("test-secret", payload))
+        .send(payload);
+    
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(second.body).toEqual({ accepted: true, ignored: true, reason: "duplicate_delivery" });
+      expect(forkCalls.filter((name) => name === "feature/replay")).toHaveLength(1);
+    });
 });

@@ -26,11 +26,43 @@ type ForkEngine = {
   healthCheck(databaseUrl: string): Promise<boolean>;
 };
 
+type WebhookReplayCache = {
+  has(deliveryId: string): boolean;
+  record(deliveryId: string): void;
+};
+
+const WEBHOOK_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
+function createInMemoryWebhookReplayCache(): WebhookReplayCache {
+  const deliveries = new Map<string, number>();
+
+  const pruneExpired = (): void => {
+    const now = Date.now();
+    for (const [deliveryId, seenAt] of deliveries.entries()) {
+      if (now - seenAt > WEBHOOK_REPLAY_WINDOW_MS) {
+        deliveries.delete(deliveryId);
+      }
+    }
+  };
+
+  return {
+    has(deliveryId: string): boolean {
+      pruneExpired();
+      return deliveries.has(deliveryId);
+    },
+    record(deliveryId: string): void {
+      pruneExpired();
+      deliveries.set(deliveryId, Date.now());
+    }
+  };
+}
+
 type OrchestratorDependencies = {
   forkEngine: ForkEngine;
   branches: BranchStateRepository;
   vercel: VercelClient;
   githubComments: GithubCommentPublisher;
+  webhookReplayCache: WebhookReplayCache;
   migrationRunner: (projectRoot: string, branchDatabaseUrl: string) => Promise<MigrationRunReport>;
   webhookSecret: string;
   sourceDatabaseUrl: string;
@@ -58,6 +90,7 @@ function createDefaultDependencies(): OrchestratorDependencies {
     githubComments: githubToken
       ? new OctokitGithubCommentPublisher(githubToken)
       : new NoopGithubCommentPublisher(),
+    webhookReplayCache: createInMemoryWebhookReplayCache(),
     migrationRunner: runPendingMigrations,
     webhookSecret: config.githubWebhookSecret ?? "",
     sourceDatabaseUrl: config.sourceDatabaseUrl,
@@ -93,6 +126,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       branches: partialDeps?.branches as BranchStateRepository,
       vercel: partialDeps?.vercel as VercelClient,
       githubComments: partialDeps?.githubComments ?? new NoopGithubCommentPublisher(),
+      webhookReplayCache: partialDeps?.webhookReplayCache ?? createInMemoryWebhookReplayCache(),
       migrationRunner: partialDeps?.migrationRunner ?? runPendingMigrations,
       webhookSecret: partialDeps?.webhookSecret ?? "",
       sourceDatabaseUrl: partialDeps?.sourceDatabaseUrl ?? "",
@@ -170,9 +204,14 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   app.post("/webhooks/github", async (c) => {
     const event = c.req.header("x-github-event");
     const signature = c.req.header("x-hub-signature-256");
+    const deliveryId = c.req.header("x-github-delivery")?.trim();
 
-    if (!event || !signature) {
+    if (!event || !signature || !deliveryId) {
       return c.json({ error: "Missing GitHub webhook headers." }, 400);
+    }
+
+    if (deps.webhookReplayCache.has(deliveryId)) {
+      return c.json({ accepted: true, ignored: true, reason: "duplicate_delivery" }, 200);
     }
 
     const rawBody = await c.req.text();
@@ -184,6 +223,8 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     if (!json) {
       return c.json({ error: "Invalid JSON body." }, 400);
     }
+
+    deps.webhookReplayCache.record(deliveryId);
 
     if (event === "pull_request") {
       const parsed = githubPullRequestSchema.safeParse(json);
