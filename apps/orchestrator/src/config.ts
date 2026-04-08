@@ -4,6 +4,7 @@ type Config = {
   port: number;
   databaseUrl: string | null;
   sourceDatabaseUrl: string;
+  authSecret: string | null;
   githubWebhookSecret: string | null;
   vercelApiToken: string | null;
   projectRoot: string;
@@ -33,12 +34,35 @@ export function getConfig(): Config {
     port: parsePort(readOptional("PORT")),
     databaseUrl,
     sourceDatabaseUrl,
+    authSecret: readOptional("AUTH_SECRET"),
     githubWebhookSecret: readOptional("GITHUB_WEBHOOK_SECRET"),
     vercelApiToken: readOptional("VERCEL_API_TOKEN"),
     projectRoot: readOptional("FLOWDB_PROJECT_ROOT") ?? process.cwd(),
     version: readOptional("FLOWDB_VERSION") ?? "0.1.0",
     migrationsDir: path.resolve(process.cwd(), "apps", "orchestrator", "migrations")
   };
+}
+
+export function isProductionRuntime(): boolean {
+  return (process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
+}
+
+export function assertProductionConfig(config: Config): void {
+  const missing: string[] = [];
+
+  if (!config.sourceDatabaseUrl) {
+    missing.push("SOURCE_DATABASE_URL or DATABASE_URL");
+  }
+  if (!config.authSecret) {
+    missing.push("AUTH_SECRET");
+  }
+  if (!config.githubWebhookSecret) {
+    missing.push("GITHUB_WEBHOOK_SECRET");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required production env vars: ${missing.join(", ")}`);
+  }
 }
 
 export function getMissingEnvMessages(): string[] {

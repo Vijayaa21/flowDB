@@ -1,6 +1,6 @@
 import { Client } from "pg";
 
-import { getConfig, getMissingEnvMessages } from "./config";
+import { assertProductionConfig, getConfig, getMissingEnvMessages, isProductionRuntime } from "./config";
 import { createApp } from "./server";
 
 async function canConnectToDatabase(databaseUrl: string | null): Promise<boolean> {
@@ -22,6 +22,10 @@ async function canConnectToDatabase(databaseUrl: string | null): Promise<boolean
 
 async function start(): Promise<void> {
   const config = getConfig();
+  if (isProductionRuntime()) {
+    assertProductionConfig(config);
+  }
+
   const app = createApp();
   const missingEnv = getMissingEnvMessages();
 

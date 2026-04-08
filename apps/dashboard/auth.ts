@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import type { NextAuthConfig, NextAuthResult } from "next-auth";
 import GitHub from "next-auth/providers/github";
-import { createHmac } from "crypto";
 
 /*
 GitHub OAuth App setup for local FlowDB development:
@@ -31,16 +30,43 @@ const fallbackClientId = "dummy";
 const fallbackClientSecret = "dummy";
 const fallbackAuthSecret = "dev-auth-secret-change-me";
 
-const resolvedClientId = githubClientId && !isPlaceholder(githubClientId) ? githubClientId : fallbackClientId;
-const resolvedClientSecret =
-  githubClientSecret && !isPlaceholder(githubClientSecret) ? githubClientSecret : fallbackClientSecret;
-const resolvedAuthSecret = authSecret && !isPlaceholder(authSecret) ? authSecret : fallbackAuthSecret;
+const isProduction = (process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
+const isBuildPhase =
+  process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build";
 
-function base64UrlEncode(input: string): string {
-  return Buffer.from(input, "utf8").toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+function resolveSecretOrThrow(name: string, value: string | undefined, fallback: string): string {
+  if (value && !isPlaceholder(value)) {
+    return value;
+  }
+
+  if (isProduction && !isBuildPhase) {
+    throw new Error(`Missing or invalid ${name} in production environment.`);
+  }
+
+  return fallback;
 }
 
-function signFlowDbToken(githubId: string, secret: string): string {
+const resolvedClientId = resolveSecretOrThrow("GITHUB_CLIENT_ID", githubClientId, fallbackClientId);
+const resolvedClientSecret = resolveSecretOrThrow(
+  "GITHUB_CLIENT_SECRET",
+  githubClientSecret,
+  fallbackClientSecret
+);
+const resolvedAuthSecret = resolveSecretOrThrow("AUTH_SECRET", authSecret, fallbackAuthSecret);
+
+function base64UrlEncode(input: string): string {
+  return base64UrlEncodeBytes(new TextEncoder().encode(input));
+}
+
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+async function signFlowDbToken(githubId: string, secret: string): Promise<string> {
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64UrlEncode(
     JSON.stringify({
@@ -50,12 +76,20 @@ function signFlowDbToken(githubId: string, secret: string): string {
     })
   );
   const data = `${header}.${payload}`;
-  const signature = createHmac("sha256", secret)
-    .update(data)
-    .digest("base64")
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    {
+      name: "HMAC",
+      hash: "SHA-256"
+    },
+    false,
+    ["sign"]
+  );
+  const signatureBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  const signature = base64UrlEncodeBytes(new Uint8Array(signatureBuffer));
+
   return `${data}.${signature}`;
 }
 
@@ -80,7 +114,7 @@ const authConfig: NextAuthConfig = {
         token.githubId = account.providerAccountId;
       }
       if (typeof token.githubId === "string") {
-        token.flowdbToken = signFlowDbToken(token.githubId, resolvedAuthSecret);
+        token.flowdbToken = await signFlowDbToken(token.githubId, resolvedAuthSecret);
       }
       return token;
     },

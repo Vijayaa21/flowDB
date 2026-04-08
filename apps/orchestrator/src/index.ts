@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { handle } from "hono/vercel";
 
 import { createApp } from "./server";
-import { getConfig } from "./config";
+import { assertProductionConfig, getConfig, isProductionRuntime } from "./config";
 import { runPendingMigrations } from "./migrations";
 
 const app = createApp();
@@ -16,6 +16,10 @@ export default handle(app);
 
 export async function startOrchestrator(): Promise<void> {
 	const config = getConfig();
+	if (isProductionRuntime()) {
+		assertProductionConfig(config);
+	}
+
 	const migrationDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
 	if (!migrationDatabaseUrl) {
 		throw new Error("DATABASE_URL or SOURCE_DATABASE_URL is required to run migrations.");
