@@ -41,6 +41,13 @@ type BranchListResponse =
       items?: Branch[];
     };
 
+function buildRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
@@ -86,6 +93,7 @@ export function saveDashboardConfig(config: DashboardConfig): DashboardConfig {
 async function apiFetch<T>(path: string, config: DashboardConfig, init: RequestInit = {}): Promise<T> {
   const session = await getSession();
   const headers = new Headers(init.headers);
+  headers.set("x-request-id", buildRequestId());
   headers.set("accept", "application/json");
 
   if (config.orgSlug) {

@@ -186,8 +186,36 @@ describe("orchestrator routes", () => {
     const response = await request(server).get("/health");
     expect(response.status).toBe(200);
     expect(response.body.status).toBe("ok");
+    expect(typeof response.body.requestId).toBe("string");
     expect(response.body.version).toBe("test-version");
     expect(typeof response.body.timestamp).toBe("string");
+    expect(typeof response.headers["x-request-id"]).toBe("string");
+  });
+
+  test("GET /health echoes incoming request id", async () => {
+    const response = await request(server)
+      .get("/health")
+      .set("x-request-id", "req-health-echo-1");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["x-request-id"]).toBe("req-health-echo-1");
+    expect(response.body.requestId).toBe("req-health-echo-1");
+  });
+
+  test("GET /metrics returns baseline request metrics", async () => {
+    await request(server).get("/health");
+    await request(server).get("/health");
+
+    const response = await request(server)
+      .get("/metrics")
+      .set("x-request-id", "req-metrics-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.totalRequests).toBeGreaterThanOrEqual(3);
+    expect(response.body.byMethod.GET).toBeGreaterThanOrEqual(3);
+    expect(response.body.byPath["GET /health"]).toBeGreaterThanOrEqual(2);
+    expect(response.body.requestId).toBe("req-metrics-1");
+    expect(response.headers["x-request-id"]).toBe("req-metrics-1");
   });
 
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {

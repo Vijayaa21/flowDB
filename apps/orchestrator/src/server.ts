@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { randomUUID } from "node:crypto";
 
 import { PostgreSQLForkEngine, type BranchInfo, type ForkResult } from "@flowdb/core";
 
@@ -71,6 +72,38 @@ type OrchestratorDependencies = {
   scheduleTask: (task: () => Promise<void>) => void;
 };
 
+type RequestMetrics = {
+  startedAt: number;
+  totalRequests: number;
+  totalDurationMs: number;
+  byMethod: Record<string, number>;
+  byStatus: Record<string, number>;
+  byPath: Record<string, number>;
+};
+
+function createRequestMetrics(): RequestMetrics {
+  return {
+    startedAt: Date.now(),
+    totalRequests: 0,
+    totalDurationMs: 0,
+    byMethod: {},
+    byStatus: {},
+    byPath: {}
+  };
+}
+
+function incrementCounter(store: Record<string, number>, key: string): void {
+  store[key] = (store[key] ?? 0) + 1;
+}
+
+function getRequestId(headerValue: string | undefined): string {
+  const trimmed = headerValue?.trim();
+  if (trimmed && trimmed.length <= 128) {
+    return trimmed;
+  }
+  return randomUUID();
+}
+
 class NoopVercelClient implements VercelClient {
   public async injectDeploymentDatabaseUrl(): Promise<void> {
     return;
@@ -117,7 +150,7 @@ function parseJsonSafely<T>(raw: string): T | null {
 }
 
 export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono<{
-  Variables: { githubId: string };
+  Variables: { githubId: string; requestId: string };
 }> {
   const defaults = partialDeps ? undefined : createDefaultDependencies();
   const deps: OrchestratorDependencies = {
@@ -143,23 +176,87 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     ...partialDeps
   } as OrchestratorDependencies;
 
-  const app = new Hono<{ Variables: { githubId: string } }>();
+  const app = new Hono<{ Variables: { githubId: string; requestId: string } }>();
+  const metrics = createRequestMetrics();
 
   app.use(
     "/*",
     cors({
       origin: ["http://localhost:4010", "http://localhost:3001"],
       allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"]
+      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"]
     })
   );
+
+  app.use("/*", async (c, next) => {
+    const startedAt = performance.now();
+    const requestId = getRequestId(c.req.header("x-request-id"));
+    c.set("requestId", requestId);
+    c.header("x-request-id", requestId);
+
+    try {
+      await next();
+    } finally {
+      const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+      const method = c.req.method;
+      const path = c.req.path;
+      const status = c.res.status;
+
+      metrics.totalRequests += 1;
+      metrics.totalDurationMs += durationMs;
+      incrementCounter(metrics.byMethod, method);
+      incrementCounter(metrics.byStatus, String(status));
+      incrementCounter(metrics.byPath, `${method} ${path}`);
+
+      const githubId = (c.get("githubId") as string | undefined) ?? "anonymous";
+      const orgSlug = c.req.header("x-org-slug") ?? "";
+      const projectSlug = c.req.header("x-project-slug") ?? "";
+      const environment = c.req.header("x-flowdb-environment") ?? "";
+
+      console.info(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          event: "http_request",
+          requestId,
+          method,
+          path,
+          status,
+          durationMs,
+          githubId,
+          orgSlug,
+          projectSlug,
+          environment
+        })
+      );
+    }
+  });
 
   app.get("/health", (c) => {
     return c.json(
       {
         status: "ok",
+        requestId: c.get("requestId") as string,
         version: deps.version,
         timestamp: new Date().toISOString()
+      },
+      200
+    );
+  });
+
+  app.get("/metrics", (c) => {
+    const avgDurationMs = metrics.totalRequests > 0 ? metrics.totalDurationMs / metrics.totalRequests : 0;
+
+    return c.json(
+      {
+        startedAt: new Date(metrics.startedAt).toISOString(),
+        uptimeSeconds: Math.round((Date.now() - metrics.startedAt) / 1000),
+        totalRequests: metrics.totalRequests,
+        avgDurationMs: Math.round(avgDurationMs * 100) / 100,
+        byMethod: metrics.byMethod,
+        byStatus: metrics.byStatus,
+        byPath: metrics.byPath,
+        requestId: c.get("requestId") as string
       },
       200
     );
