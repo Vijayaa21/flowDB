@@ -213,9 +213,87 @@ describe("orchestrator routes", () => {
     expect(response.status).toBe(200);
     expect(response.body.totalRequests).toBeGreaterThanOrEqual(3);
     expect(response.body.byMethod.GET).toBeGreaterThanOrEqual(3);
+    expect(response.body.byStatusClass["2xx"]).toBeGreaterThanOrEqual(3);
     expect(response.body.byPath["GET /health"]).toBeGreaterThanOrEqual(2);
+    expect(response.body.webhooks.githubTotal).toBe(0);
+    expect(response.body.webhooks.vercelTotal).toBe(0);
+    expect(response.body.backgroundTasks.scheduled).toBe(0);
+    expect(response.body.backgroundTasks.succeeded).toBe(0);
     expect(response.body.requestId).toBe("req-metrics-1");
     expect(response.headers["x-request-id"]).toBe("req-metrics-1");
+  });
+
+  test("GET /metrics captures webhook and background task counters", async () => {
+    const pullRequestPayload = {
+      action: "opened",
+      pull_request: { number: 777, head: { ref: "feature/metrics" } }
+    };
+
+    const invalidPayload = {
+      action: "opened",
+      pull_request: { number: 778, head: { ref: "feature/invalid" } }
+    };
+
+    const vercelPayload = {
+      type: "deployment.ready",
+      payload: {
+        deployment: {
+          id: "dep_metrics_1",
+          target: "preview",
+          meta: {
+            githubCommitRef: "feature/metrics"
+          }
+        }
+      }
+    };
+
+    await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-metrics-open-777")
+      .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
+      .send(pullRequestPayload);
+
+    await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-metrics-open-777")
+      .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
+      .send(pullRequestPayload);
+
+    await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-metrics-invalid-778")
+      .set("x-hub-signature-256", "sha256=invalid")
+      .send(invalidPayload);
+
+    await request(server)
+      .post("/webhooks/vercel")
+      .set("authorization", authHeader)
+      .send(vercelPayload);
+
+    const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-2");
+
+    expect(response.status).toBe(200);
+    expect(response.body.webhooks.githubTotal).toBeGreaterThanOrEqual(3);
+    expect(response.body.webhooks.githubByEvent.pull_request).toBeGreaterThanOrEqual(3);
+    expect(response.body.webhooks.githubByAction.opened).toBeGreaterThanOrEqual(1);
+    expect(response.body.webhooks.githubDuplicates).toBeGreaterThanOrEqual(1);
+    expect(response.body.webhooks.githubInvalidSignatures).toBeGreaterThanOrEqual(1);
+    expect(response.body.webhooks.vercelTotal).toBeGreaterThanOrEqual(1);
+    expect(response.body.webhooks.vercelPreviewReady).toBeGreaterThanOrEqual(1);
+    expect(response.body.backgroundTasks.scheduled).toBeGreaterThanOrEqual(2);
+    expect(response.body.backgroundTasks.succeeded).toBeGreaterThanOrEqual(2);
+    expect(response.body.backgroundTasks.failed).toBe(0);
+    expect(response.body.backgroundTasks.byName["github.pull_request.open_or_reopen"]).toBeGreaterThanOrEqual(
+      1
+    );
+    expect(response.body.backgroundTasks.byName["vercel.deployment.ready.preview"]).toBeGreaterThanOrEqual(1);
+    expect(response.body.requestId).toBe("req-metrics-2");
   });
 
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {

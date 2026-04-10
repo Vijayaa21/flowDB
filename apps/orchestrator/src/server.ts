@@ -78,7 +78,28 @@ type RequestMetrics = {
   totalDurationMs: number;
   byMethod: Record<string, number>;
   byStatus: Record<string, number>;
+  byStatusClass: Record<string, number>;
   byPath: Record<string, number>;
+};
+
+type WebhookMetrics = {
+  githubTotal: number;
+  githubDuplicates: number;
+  githubInvalidSignatures: number;
+  githubInvalidPayloads: number;
+  githubByEvent: Record<string, number>;
+  githubByAction: Record<string, number>;
+  vercelTotal: number;
+  vercelInvalidPayloads: number;
+  vercelPreviewReady: number;
+};
+
+type BackgroundTaskMetrics = {
+  scheduled: number;
+  succeeded: number;
+  failed: number;
+  totalDurationMs: number;
+  byName: Record<string, number>;
 };
 
 function createRequestMetrics(): RequestMetrics {
@@ -88,7 +109,32 @@ function createRequestMetrics(): RequestMetrics {
     totalDurationMs: 0,
     byMethod: {},
     byStatus: {},
+    byStatusClass: {},
     byPath: {}
+  };
+}
+
+function createWebhookMetrics(): WebhookMetrics {
+  return {
+    githubTotal: 0,
+    githubDuplicates: 0,
+    githubInvalidSignatures: 0,
+    githubInvalidPayloads: 0,
+    githubByEvent: {},
+    githubByAction: {},
+    vercelTotal: 0,
+    vercelInvalidPayloads: 0,
+    vercelPreviewReady: 0
+  };
+}
+
+function createBackgroundTaskMetrics(): BackgroundTaskMetrics {
+  return {
+    scheduled: 0,
+    succeeded: 0,
+    failed: 0,
+    totalDurationMs: 0,
+    byName: {}
   };
 }
 
@@ -178,6 +224,35 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
   const app = new Hono<{ Variables: { githubId: string; requestId: string } }>();
   const metrics = createRequestMetrics();
+  const webhookMetrics = createWebhookMetrics();
+  const backgroundTaskMetrics = createBackgroundTaskMetrics();
+
+  const runBackgroundTask = (name: string, task: () => Promise<void>): void => {
+    backgroundTaskMetrics.scheduled += 1;
+    incrementCounter(backgroundTaskMetrics.byName, name);
+
+    deps.scheduleTask(async () => {
+      const startedAt = performance.now();
+      try {
+        await task();
+        backgroundTaskMetrics.succeeded += 1;
+      } catch (error) {
+        backgroundTaskMetrics.failed += 1;
+        console.error(
+          JSON.stringify({
+            timestamp: new Date().toISOString(),
+            level: "error",
+            event: "background_task_failed",
+            taskName: name,
+            error: error instanceof Error ? error.message : "Unknown error"
+          })
+        );
+      } finally {
+        backgroundTaskMetrics.totalDurationMs +=
+          Math.round((performance.now() - startedAt) * 100) / 100;
+      }
+    });
+  };
 
   app.use(
     "/*",
@@ -206,6 +281,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       metrics.totalDurationMs += durationMs;
       incrementCounter(metrics.byMethod, method);
       incrementCounter(metrics.byStatus, String(status));
+      incrementCounter(metrics.byStatusClass, `${Math.floor(status / 100)}xx`);
       incrementCounter(metrics.byPath, `${method} ${path}`);
 
       const githubId = (c.get("githubId") as string | undefined) ?? "anonymous";
@@ -255,7 +331,17 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         avgDurationMs: Math.round(avgDurationMs * 100) / 100,
         byMethod: metrics.byMethod,
         byStatus: metrics.byStatus,
+        byStatusClass: metrics.byStatusClass,
         byPath: metrics.byPath,
+        webhooks: webhookMetrics,
+        backgroundTasks: {
+          ...backgroundTaskMetrics,
+          avgDurationMs:
+            backgroundTaskMetrics.scheduled > 0
+              ? Math.round((backgroundTaskMetrics.totalDurationMs / backgroundTaskMetrics.scheduled) * 100) /
+                100
+              : 0
+        },
         requestId: c.get("requestId") as string
       },
       200
@@ -299,20 +385,27 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   });
 
   app.post("/webhooks/github", async (c) => {
+    webhookMetrics.githubTotal += 1;
     const event = c.req.header("x-github-event");
     const signature = c.req.header("x-hub-signature-256");
     const deliveryId = c.req.header("x-github-delivery")?.trim();
+
+    if (event) {
+      incrementCounter(webhookMetrics.githubByEvent, event);
+    }
 
     if (!event || !signature || !deliveryId) {
       return c.json({ error: "Missing GitHub webhook headers." }, 400);
     }
 
     if (deps.webhookReplayCache.has(deliveryId)) {
+      webhookMetrics.githubDuplicates += 1;
       return c.json({ accepted: true, ignored: true, reason: "duplicate_delivery" }, 200);
     }
 
     const rawBody = await c.req.text();
     if (!verifyGithubSignature(rawBody, signature, deps.webhookSecret)) {
+      webhookMetrics.githubInvalidSignatures += 1;
       return c.json({ error: "Invalid signature." }, 401);
     }
 
@@ -326,13 +419,15 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     if (event === "pull_request") {
       const parsed = githubPullRequestSchema.safeParse(json);
       if (!parsed.success) {
+        webhookMetrics.githubInvalidPayloads += 1;
         return c.json({ error: "Invalid pull_request payload." }, 400);
       }
 
       const payload = parsed.data;
+      incrementCounter(webhookMetrics.githubByAction, payload.action);
       const githubId = c.get("githubId") as string;
       if (payload.action === "opened" || payload.action === "reopened") {
-        deps.scheduleTask(async () => {
+        runBackgroundTask("github.pull_request.open_or_reopen", async () => {
           const byPr = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
           const byBranch = await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref);
           const existing = byPr ?? byBranch;
@@ -356,7 +451,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       }
 
       if (payload.action === "closed") {
-        deps.scheduleTask(async () => {
+        runBackgroundTask("github.pull_request.closed", async () => {
           const existing = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
           const target =
             existing ?? (await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref));
@@ -374,10 +469,11 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     if (event === "push") {
       const parsed = githubPushSchema.safeParse(json);
       if (!parsed.success) {
+        webhookMetrics.githubInvalidPayloads += 1;
         return c.json({ error: "Invalid push payload." }, 400);
       }
 
-      deps.scheduleTask(async () => {
+      runBackgroundTask("github.push", async () => {
         const githubId = c.get("githubId") as string;
         const branchName = toBranchName(parsed.data.ref);
         const branch = await deps.branches.getByBranchName(githubId, branchName);
@@ -428,10 +524,12 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   });
 
   app.post("/webhooks/vercel", async (c) => {
+    webhookMetrics.vercelTotal += 1;
     const json = await c.req.json();
     const parsed = vercelWebhookSchema.safeParse(json);
 
     if (!parsed.success) {
+      webhookMetrics.vercelInvalidPayloads += 1;
       return c.json({ error: "Invalid Vercel payload." }, 400);
     }
 
@@ -439,7 +537,8 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     const deployment = payload.payload?.deployment;
 
     if (payload.type === "deployment.ready" && deployment?.target === "preview") {
-      deps.scheduleTask(async () => {
+      webhookMetrics.vercelPreviewReady += 1;
+      runBackgroundTask("vercel.deployment.ready.preview", async () => {
         const githubId = c.get("githubId") as string;
         const branchName = (deployment.meta?.githubCommitRef ?? payload.payload?.git?.branch) as string | undefined;
         const branch = branchName ? await deps.branches.getByBranchName(githubId, branchName as string) : null;
