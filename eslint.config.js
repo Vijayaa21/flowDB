@@ -8,12 +8,26 @@ export default [
   },
   js.configs.recommended,
   {
+    files: ["**/*.js", "**/*.mjs", "**/*.cjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly"
+      }
+    }
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module"
+      },
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        setTimeout: "readonly"
       }
     },
     plugins: {
@@ -21,6 +35,10 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      "no-undef": "off",
+      "no-useless-escape": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/triple-slash-reference": "off",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {

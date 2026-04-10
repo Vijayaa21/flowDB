@@ -298,7 +298,6 @@ export default function HomePage() {
           <div className="border-t border-(--gh-border-default) px-2 pt-4 lg:px-4">
             <div className="mb-3 hidden items-center gap-3 rounded-xl border border-(--gh-border-default) p-2 lg:flex">
               {userAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={userAvatar}
                   alt={userName}

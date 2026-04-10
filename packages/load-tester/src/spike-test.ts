@@ -1,4 +1,4 @@
-import autocannon, { Result } from 'autocannon';
+import autocannon from 'autocannon';
 import chalk from 'chalk';
 
 /**
@@ -21,7 +21,7 @@ async function runSpikeTest(): Promise<void> {
     duration: 30,
     connections: 100,
     pipelining: 1,
-  } as any);
+  });
 
   console.log(`  Throughput: ${baseline.requests.average.toFixed(2)} req/s`);
   console.log(`  P99: ${baseline.latency.p99.toFixed(2)}ms\n`);
@@ -33,7 +33,7 @@ async function runSpikeTest(): Promise<void> {
     duration: 30,
     connections: 500,
     pipelining: 1,
-  } as any);
+  });
 
   console.log(`  Throughput: ${rampup.requests.average.toFixed(2)} req/s`);
   console.log(`  P99: ${rampup.latency.p99.toFixed(2)}ms\n`);
@@ -45,7 +45,7 @@ async function runSpikeTest(): Promise<void> {
     duration: 30,
     connections: 1000,
     pipelining: 2,
-  } as any);
+  });
 
   console.log(`  Throughput: ${spike.requests.average.toFixed(2)} req/s`);
   console.log(`  P99: ${spike.latency.p99.toFixed(2)}ms`);
@@ -58,7 +58,7 @@ async function runSpikeTest(): Promise<void> {
     duration: 30,
     connections: 100,
     pipelining: 1,
-  } as any);
+  });
 
   console.log(`  Throughput: ${cooldown.requests.average.toFixed(2)} req/s`);
   console.log(`  P99: ${cooldown.latency.p99.toFixed(2)}ms\n`);
@@ -77,8 +77,9 @@ async function runSpikeTest(): Promise<void> {
 
   // Verdict
   console.log(chalk.dim('\n' + '='.repeat(60)));
+  const spikeErrors = spike.errors ?? 0;
   const verdict =
-    spike.errors === 0 &&
+    spikeErrors === 0 &&
     degradation < 200 &&
     cooldown.latency.p99 < baselineP99 * 1.1;
 
@@ -87,7 +88,7 @@ async function runSpikeTest(): Promise<void> {
     console.log('System handles 10x traffic spike gracefully');
   } else {
     console.log(chalk.red('❌ SPIKE TEST FAILED'));
-    if (spike.errors > 0) console.log(`  - Errors during spike: ${spike.errors}`);
+    if (spikeErrors > 0) console.log(`  - Errors during spike: ${spikeErrors}`);
     if (degradation > 200) console.log(`  - Latency degradation too high: ${degradation.toFixed(1)}%`);
     if (cooldown.latency.p99 > baselineP99 * 1.1)
       console.log('  - Slow recovery after spike');

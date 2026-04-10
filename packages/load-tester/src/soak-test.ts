@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-import axios from 'axios';
 
 /**
  * Soak Testing Suite for FlowDB
@@ -63,12 +62,14 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
     const requestStart = Date.now();
 
     try {
-      await axios.get(`${API_BASE}/health`, {
+      const response = await fetch(`${API_BASE}/health`, {
         headers: {
           'Authorization': AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : '',
         },
-        timeout: 10000,
       });
+      if (!response.ok) {
+        throw new Error(`Health check returned ${response.status}`);
+      }
 
       const latency = Date.now() - requestStart;
       latencies.push(latency);

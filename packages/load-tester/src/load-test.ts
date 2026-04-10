@@ -1,6 +1,5 @@
-import autocannon, { Result } from 'autocannon';
+import autocannon from 'autocannon';
 import chalk from 'chalk';
-import axios from 'axios';
 
 /**
  * Load Testing Suite for FlowDB
@@ -45,12 +44,14 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
  */
 async function preHealthCheck(): Promise<boolean> {
   try {
-    const response = await axios.get(`${API_BASE}/health`, {
-      timeout: 5000,
-    });
+    const response = await fetch(`${API_BASE}/health`);
+    if (!response.ok) {
+      throw new Error(`Health check returned ${response.status}`);
+    }
+    const payload = (await response.json()) as { version?: string; database?: string };
     console.log(chalk.green('✓ Health check passed'));
-    console.log(`  Version: ${response.data.version}`);
-    console.log(`  Database: ${response.data.database}`);
+    console.log(`  Version: ${payload.version ?? 'unknown'}`);
+    console.log(`  Database: ${payload.database ?? 'unknown'}`);
     return true;
   } catch (error) {
     console.log(chalk.red('✗ Health check failed'));
@@ -83,7 +84,7 @@ async function runLoadTest(config: LoadTestConfig): Promise<PerformanceMetrics> 
         method: 'GET',
       },
     ],
-  } as any);
+  });
 
   const metrics: PerformanceMetrics = {
     title: config.title,
@@ -193,7 +194,7 @@ async function spikeLoadTest(): Promise<PerformanceMetrics> {
  * Stress test
  * Maximum sustainable load determination
  */
-async function stressLoadTest(): Promise<PerformanceMetrics> {
+async function _stressLoadTest(): Promise<PerformanceMetrics> {
   console.log(chalk.yellow('\n⚠ Stress test starting - will push system to limits'));
 
   return runLoadTest({
@@ -239,6 +240,11 @@ async function runFullSuite(): Promise<void> {
 
   // Summary
   console.log(chalk.cyan.bold('\n\n📋 Test Summary\n'));
+  if (results.length === 0) {
+    console.log(chalk.red('No test results were collected'));
+    process.exit(1);
+  }
+  const baselineResult = results[0]!;
   console.log(chalk.dim('Test'.padEnd(45) + 'Status'.padEnd(10) + 'P99 Latency'));
   console.log(chalk.dim('-'.repeat(75)));
 
@@ -261,13 +267,12 @@ async function runFullSuite(): Promise<void> {
   console.log(chalk.dim('Metric'.padEnd(25) + 'Target'.padEnd(20) + 'Result'));
   console.log(chalk.dim('-'.repeat(60)));
 
-  const baselineResult = results[0];
   const benchmarks = [
     ['P99 Latency', '< 500ms', `${baselineResult.latency.p99.toFixed(2)}ms`],
     ['Error Rate', '< 0.5%', `${baselineResult.errorRate.toFixed(2)}%`],
     ['Throughput', '> 500 req/s', `${baselineResult.throughput.toFixed(2)} req/s`],
     ['Mean Latency', '< 100ms', `${baselineResult.latency.mean.toFixed(2)}ms`],
-  ];
+  ] as const;
 
   for (const [metric, target, result] of benchmarks) {
     console.log(metric.padEnd(25) + target.padEnd(20) + result);

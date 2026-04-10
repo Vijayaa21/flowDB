@@ -1,4 +1,4 @@
-import autocannon, { Result } from 'autocannon';
+import autocannon from 'autocannon';
 import chalk from 'chalk';
 
 /**
@@ -47,7 +47,7 @@ async function runStressTest(): Promise<void> {
         duration: phase.duration,
         connections: phase.connections,
         pipelining: Math.ceil(phase.connections / 100),
-      } as any);
+      });
 
       const errorRate = ((result.errors || 0) / result.requests.total) * 100;
 
@@ -97,9 +97,13 @@ async function runStressTest(): Promise<void> {
   console.log(chalk.dim('-'.repeat(60)));
 
   // Find saturation point
+  if (results.length === 0) {
+    console.log(chalk.red('No stress test results were collected'));
+    process.exit(1);
+  }
   const sortedByThroughput = [...results].sort((a, b) => b.throughput - a.throughput);
-  const maxThroughput = sortedByThroughput[0];
-  const saturationPoint = sortedByThroughput[0].connections;
+  const maxThroughput = sortedByThroughput[0]!;
+  const saturationPoint = maxThroughput.connections;
 
   console.log(chalk.cyan.bold('\n📈 Key Findings\n'));
   console.log(`Maximum Throughput: ${maxThroughput.throughput.toFixed(2)} req/s at ${saturationPoint} connections`);
