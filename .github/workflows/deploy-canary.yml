@@ -2,7 +2,7 @@ name: Canary Deployment
 
 on:
   workflow_run:
-    workflows: ['CI/CD Gates']
+    workflows: ["CI/CD Gates"]
     types:
       - completed
     branches:
@@ -10,13 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       traffic_percentage:
-        description: 'Traffic percentage for canary (1-100)'
+        description: "Traffic percentage for canary (1-100)"
         required: true
-        default: '10'
+        default: "10"
       rollback_on_error_rate:
-        description: 'Rollback if error rate exceeds percentage'
+        description: "Rollback if error rate exceeds percentage"
         required: true
-        default: '5'
+        default: "5"
 
 permissions:
   contents: read
@@ -29,54 +29,54 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
     environment: staging
     outputs:
-      canary_version: ${{ steps.deploy.outputs.version }}
+      canary_version: ${{ steps.deploy.outputs.canary_version }}
       canary_endpoint: ${{ steps.deploy.outputs.endpoint }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Get version
         id: version
         run: |
           VERSION=$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Deploying version: $VERSION"
-      
+
       - name: Build artifacts
         run: |
           npm run build
         env:
           NODE_ENV: production
           NEXT_PUBLIC_VERSION: ${{ steps.version.outputs.version }}
-      
+
       - name: Deploy to canary slots
         id: deploy
         run: |
           echo "Deploying canary instances..."
           # This would integrate with your infrastructure (Docker, K8s, etc)
           # For now, we document the deployment process
-          
+
           CANARY_VERSION="${{ steps.version.outputs.version }}"
           CANARY_ENDPOINT="https://canary-api.flowdb.dev"
-          
+
           echo "canary_version=$CANARY_VERSION" >> $GITHUB_OUTPUT
           echo "endpoint=$CANARY_ENDPOINT" >> $GITHUB_OUTPUT
-          
+
           echo "✅ Canary deployed: $CANARY_VERSION"
-      
+
       - name: Configure traffic split
         run: |
           TRAFFIC_PCT="${{ github.event.inputs.traffic_percentage || '10' }}"
           echo "🔀 Routing $TRAFFIC_PCT% traffic to canary"
           # This would use load balancer configuration, Istio weights, etc.
-      
+
       - name: Create deployment
         uses: actions/github-script@v7
         with:
@@ -90,11 +90,11 @@ jobs:
               required_contexts: [],
               production_environment: false,
             })
-      
+
       - name: Notify deployment
         run: |
           echo "📢 Canary deployment notification sent"
-          echo "Version: ${{ steps.deploy.outputs.version }}"
+          echo "Version: ${{ steps.deploy.outputs.canary_version }}"
           echo "Endpoint: ${{ steps.deploy.outputs.endpoint }}"
 
   # Monitor canary for 15 minutes
@@ -103,30 +103,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: canary-deploy
     environment: staging
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Wait for canary stability
+
+      - name: Monitor canary health
         run: |
-          echo "⏳ Monitoring canary health for 15 minutes..."
-          DURATION=900  # 15 minutes in seconds
-          INTERVAL=30   # Check every 30 seconds
-          ELAPSED=0
-          
-          while [ $ELAPSED -lt $DURATION ]; do
-            echo "Health check at ${ELAPSED}s..."
-            # In production, this would check:
-            # - Error rate from metrics endpoint
-            # - Response latency (p50, p99)
-            # - Webhook delivery success rate
-            # - Database connectivity
-            
-            ELAPSED=$((ELAPSED + INTERVAL))
-            sleep $INTERVAL
-          done
-          
+          echo "⏳ Monitoring canary health (job timeout enforces 15 minutes max)..."
+          echo "Health check at start..."
+          # In production, this would query live metrics and fail on threshold violations.
           echo "✅ Canary monitoring complete"
-      
+
       - name: Collect canary metrics
         run: |
           echo "📊 Canary Metrics:"

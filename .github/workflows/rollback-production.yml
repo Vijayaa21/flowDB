@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       rollback_reason:
-        description: 'Reason for rollback'
+        description: "Reason for rollback"
         required: true
       target_version:
-        description: 'Target version to rollback to (leave empty for previous)'
+        description: "Target version to rollback to (leave empty for previous)"
         required: false
 
 permissions:
@@ -46,25 +46,27 @@ jobs:
       rollback_time: ${{ steps.rollback.outputs.timestamp }}
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 2
+
       - name: Identify rollback target
         run: |
           TARGET="${{ github.event.inputs.target_version || 'previous' }}"
           echo "🎯 Rollback target: $TARGET"
-          
+
           if [[ "$TARGET" == "previous" ]]; then
             echo "Using previous production version"
             # Query deployment history to find previous healthy version
             echo "Previous version found: <version>"
           fi
-      
+
       - name: Execute rollback
         id: rollback
         run: |
           TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
           PREVIOUS_VERSION=$(git rev-parse HEAD~1 | cut -c1-7)
           CURRENT_VERSION=$(git rev-parse HEAD | cut -c1-7)
-          
+
           echo "⏮️  Rolling back to previous version..."
           echo ""
           echo "Timeline:"
@@ -74,17 +76,17 @@ jobs:
           echo "  4. Confirm service health"
           echo "  5. Keep GREEN available for 5 minutes"
           echo ""
-          
+
           # In production:
           # - Update load balancer to route back to previous version
           # - Drain existing connections gracefully
           # - Wait for new requests to re-route
           # - Run validation tests
-          
+
           echo "from_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "to_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          
+
           echo "✅ Rollback complete"
 
   # Verify rollback success
@@ -95,7 +97,7 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run post-rollback tests
         run: |
           echo "🧪 Running post-rollback validation..."
@@ -108,7 +110,7 @@ jobs:
           echo "  ✓ Error rate normal"
           echo ""
           echo "✅ All post-rollback checks passed"
-      
+
       - name: Notify incident management
         run: |
           echo "📢 Rollback notifications sent to:"

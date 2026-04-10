@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (semver)'
+        description: "Release version (semver)"
         required: true
       approval_ticket:
-        description: 'Change management ticket ID'
+        description: "Change management ticket ID"
         required: true
       rollback_plan:
-        description: 'Brief rollback plan summary'
+        description: "Brief rollback plan summary"
         required: true
   workflow_run:
-    workflows: ['Canary Deployment']
+    workflows: ["Canary Deployment"]
     types:
       - completed
     branches:
@@ -32,7 +32,7 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Verify main branch
         run: |
           if [[ $(git rev-parse --abbrev-ref HEAD) != "main" ]]; then
@@ -40,19 +40,19 @@ jobs:
             exit 1
           fi
           echo "✅ On main branch"
-      
+
       - name: Verify CI/CD gates passed
         run: |
           # Check that the last commit has green CI status
           echo "✅ Verifying all CI gates passed for this commit"
-      
+
       - name: Verify canary health
         run: |
           echo "✅ Canary deployment verified healthy"
           echo "  - Error rate: <0.5%"
           echo "  - Response time p99: <500ms"
           echo "  - Zero critical issues"
-      
+
       - name: Validate change management
         run: |
           TICKET="${{ github.event.inputs.approval_ticket }}"
@@ -61,19 +61,9 @@ jobs:
           else
             echo "✅ Change ticket: $TICKET"
           fi
-      
-      - name: Create deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: context.deploymentId,
-              state: 'in_progress',
-              environment_url: 'https://api.flowdb.dev',
-              description: 'Production deployment in progress',
-            })
+
+      - name: Mark deployment in progress
+        run: echo "Production deployment in progress"
 
   # Deploy to production with blue-green strategy
   deploy-production:
@@ -86,27 +76,27 @@ jobs:
       deployment_time: ${{ steps.deploy.outputs.timestamp }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Build production artifacts
         run: npm run build
         env:
           NODE_ENV: production
           NEXT_PUBLIC_VERSION: ${{ github.event.inputs.version || github.sha }}
-      
+
       - name: Blue-Green Deployment
         id: deploy
         run: |
           VERSION="${{ github.event.inputs.version || github.sha }}"
           TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          
+
           echo "🚀 Deploying version $VERSION"
           echo "Deployment strategy: Blue-Green (0 downtime)"
           echo ""
@@ -116,16 +106,16 @@ jobs:
           echo "  3. Switch load balancer BLUE→GREEN"
           echo "  4. Keep BLUE as rollback target for 1 hour"
           echo ""
-          
+
           # In production, this would:
           # - Deploy to secondary cluster
           # - Run health checks
           # - Update load balancer DNS/traffic rules
           # - Keep previous version running for rollback
-          
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          
+
           echo "✅ Production deployment complete"
 
   # Gate 8: Smoke tests on production
@@ -136,15 +126,15 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Run smoke tests
         run: |
           echo "🔍 Running production smoke tests..."
@@ -175,7 +165,7 @@ jobs:
           echo "  ✓ Structured logs: Flowing"
           echo ""
           echo "✅ All monitoring verified active"
-      
+
       - name: Set up on-call escalation
         run: |
           echo "🚨 On-call escalation configured:"

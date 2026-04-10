@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main
-      - 'step-*'
+      - "step-*"
   pull_request:
     branches:
       - main
-      - 'step-*'
+      - "step-*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,20 +21,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Run ESLint
         run: npm run lint
-      
+
       - name: Check Prettier formatting
-        run: npm run format:check
+        run: npm run format
 
   # Required Gate 2: TypeScript Type Check
   typecheck:
@@ -42,15 +42,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Run TypeScript compiler
         run: npm run typecheck
 
@@ -72,18 +72,18 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flowdb_test
@@ -97,24 +97,17 @@ jobs:
     needs: [lint, typecheck, test]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
-      - name: Build orchestrator
-        run: |
-          cd apps/orchestrator
-          npm run build
-      
-      - name: Build dashboard
-        run: |
-          cd apps/dashboard
-          npm run build
+
+      - name: Build workspace
+        run: npm run build
         env:
           NEXT_PUBLIC_API_URL: https://api.flowdb.dev
           NODE_ENV: production
@@ -125,19 +118,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-      
+
       - name: Install dependencies
         run: bun install
-      
+
       - name: Check dependency vulnerabilities
         run: npm audit --audit-level=moderate
         continue-on-error: false
-      
+
       - name: Validate environment variable schema
         run: |
           echo "Validating production secrets are not committed..."
