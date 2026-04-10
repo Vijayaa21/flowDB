@@ -1,0 +1,78 @@
+name: Launch Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version label for readiness report
+        required: true
+      change_ticket:
+        description: Approved change ticket id
+        required: true
+  push:
+    branches:
+      - step-11-production-launch-operations
+
+jobs:
+  readiness-gates:
+    name: Launch Readiness Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Validate release quality gates
+        run: |
+          bun run format
+          bun run lint
+          bun run typecheck
+          bun run test
+
+      - name: Validate production docs exist
+        run: |
+          test -f docs/PRODUCTION_LAUNCH_CHECKLIST.md
+          test -f docs/FEATURE_FLAG_PLAYBOOK.md
+          test -f docs/SUPPORT_READINESS.md
+          test -f docs/SLO_SLA_POLICY.md
+
+      - name: Generate readiness summary
+        run: |
+          echo "## Step 11 Launch Readiness" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Release Version: ${{ github.event.inputs.release_version || 'step-11-dev' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Change Ticket: ${{ github.event.inputs.change_ticket || 'not-provided' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Gate Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Format check: PASS" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint check: PASS" >> $GITHUB_STEP_SUMMARY
+          echo "- Typecheck: PASS" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: PASS" >> $GITHUB_STEP_SUMMARY
+          echo "- Launch docs present: PASS" >> $GITHUB_STEP_SUMMARY
+
+  operations-handoff:
+    name: Operations Handoff Validation
+    runs-on: ubuntu-latest
+    needs: readiness-gates
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify handoff templates
+        run: |
+          grep -q "Go/No-Go Template" docs/PRODUCTION_LAUNCH_CHECKLIST.md
+          grep -q "Severity Matrix" docs/SUPPORT_READINESS.md
+          grep -q "Error Budget Policy" docs/SLO_SLA_POLICY.md
+
+      - name: Publish handoff summary
+        run: |
+          echo "### Operations Handoff" >> $GITHUB_STEP_SUMMARY
+          echo "- Go/No-Go template verified" >> $GITHUB_STEP_SUMMARY
+          echo "- Support severity matrix verified" >> $GITHUB_STEP_SUMMARY
+          echo "- SLO/SLA policy verified" >> $GITHUB_STEP_SUMMARY

@@ -264,6 +264,15 @@ T+0:30  Monitoring active, release complete
 
 See [ROLLBACK_PROCEDURES.md](./ROLLBACK_PROCEDURES.md) for detailed rollback steps.
 
+## Step 11 Operational Runbooks
+
+Use these runbooks to execute production launch and operations handoff:
+
+- [PRODUCTION_LAUNCH_CHECKLIST.md](./PRODUCTION_LAUNCH_CHECKLIST.md)
+- [FEATURE_FLAG_PLAYBOOK.md](./FEATURE_FLAG_PLAYBOOK.md)
+- [SUPPORT_READINESS.md](./SUPPORT_READINESS.md)
+- [SLO_SLA_POLICY.md](./SLO_SLA_POLICY.md)
+
 ### Quick Rollback (Emergency)
 
 **When**: Critical issue in production immediately after deployment
