@@ -1,0 +1,196 @@
+{
+  "branch_protection_rules": {
+    "main": {
+      "enforce_admins": true,
+      "require_code_owner_reviews": true,
+      "require_status_checks": true,
+      "require_branches_up_to_date": true,
+      "required_status_checks": [
+        {
+          "context": "lint",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "typecheck",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "test",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "build",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "security",
+          "app": "GitHub Actions"
+        }
+      ],
+      "required_approving_review_count": 2,
+      "dismiss_stale_reviews": true,
+      "require_code_owner_reviews": false,
+      "require_status_checks_strict": true,
+      "restrictions": {
+        "users": [],
+        "teams": ["engineering-leads"],
+        "apps": []
+      },
+      "allow_force_pushes": false,
+      "allow_deletions": false,
+      "lock_branch": false
+    },
+    "step-*": {
+      "enforce_admins": false,
+      "require_status_checks": true,
+      "require_branches_up_to_date": false,
+      "required_status_checks": [
+        {
+          "context": "lint",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "typecheck",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "test",
+          "app": "GitHub Actions"
+        },
+        {
+          "context": "build",
+          "app": "GitHub Actions"
+        }
+      ],
+      "required_approving_review_count": 1,
+      "dismiss_stale_reviews": true,
+      "restrictions": null,
+      "allow_force_pushes": true,
+      "allow_deletions": true,
+      "lock_branch": false
+    }
+  },
+  "deployment_environment": {
+    "staging": {
+      "protection_rules": [
+        {
+          "type": "wait_timer",
+          "wait_timer": 0
+        },
+        {
+          "type": "required_reviewers",
+          "reviewers": ["devops-team"],
+          "review_count": 0
+        }
+      ],
+      "deployment_branches": ["step-*"]
+    },
+    "production": {
+      "protection_rules": [
+        {
+          "type": "wait_timer",
+          "wait_timer": 3600,
+          "description": "Wait 1 hour between deployments for monitoring"
+        },
+        {
+          "type": "required_reviewers",
+          "reviewers": ["engineering-leads", "devops-team"],
+          "review_count": 1
+        }
+      ],
+      "deployment_branches": ["main"],
+      "auto_merge_enabled": false,
+      "sensitive_secrets": [
+        "SOURCE_DATABASE_URL",
+        "AUTH_SECRET",
+        "GITHUB_WEBHOOK_SECRET"
+      ]
+    }
+  },
+  "deployment_checklist": {
+    "pre_deployment": [
+      "All CI/CD gates passing on current commit",
+      "Canary deployment verified healthy (15+ minutes)",
+      "Change management ticket approved (if applicable)",
+      "On-call team standing by",
+      "Rollback plan documented",
+      "Release notes prepared",
+      "Customer communication drafted"
+    ],
+    "deployment": [
+      "Database migrations backed up (if applicable)",
+      "Feature flags configured",
+      "Monitoring dashboards active",
+      "Logging redirected to aggregation service"
+    ],
+    "post_deployment": [
+      "Health endpoints responding",
+      "Database connectivity confirmed",
+      "Smoke tests passing",
+      "Metrics dashboard showing baseline",
+      "Error rate normalized",
+      "Status page updated",
+      "Team notification sent"
+    ]
+  },
+  "rollback_gates": {
+    "automatic_triggers": [
+      {
+        "name": "error_rate_spike",
+        "threshold": "5% for 2+ minutes",
+        "action": "page_on_call"
+      },
+      {
+        "name": "canary_health_check_failure",
+        "metric": "error_rate > 2%",
+        "action": "auto_rollback"
+      },
+      {
+        "name": "smoke_test_failure",
+        "threshold": "any test fails post-deployment",
+        "action": "auto_rollback"
+      },
+      {
+        "name": "database_deadlock",
+        "threshold": "3+ deadlock errors in 5 minutes",
+        "action": "page_on_call"
+      }
+    ],
+    "manual_triggers": [
+      {
+        "condition": "unexpected behavior reported",
+        "approval_needed": "on-call or engineering lead"
+      },
+      {
+        "condition": "performance degradation sustained",
+        "approval_needed": "engineering lead"
+      },
+      {
+        "condition": "data integrity issue detected",
+        "approval_needed": "engineering lead + DBA"
+      }
+    ]
+  },
+  "monitoring_thresholds": {
+    "error_rate": {
+      "normal": "< 0.5%",
+      "warning": "0.5% - 2%",
+      "critical": "> 2%"
+    },
+    "latency_p99": {
+      "normal": "< 500ms",
+      "warning": "500ms - 1000ms",
+      "critical": "> 1000ms"
+    },
+    "webhook_delivery": {
+      "normal": "> 99.5%",
+      "warning": "95% - 99.5%",
+      "critical": "< 95%"
+    },
+    "database_errors": {
+      "normal": "0 - 5 per hour",
+      "warning": "5 - 20 per hour",
+      "critical": "> 20 per hour"
+    }
+  }
+}

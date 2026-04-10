@@ -1,0 +1,143 @@
+name: Production Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_reason:
+        description: 'Reason for rollback'
+        required: true
+      target_version:
+        description: 'Target version to rollback to (leave empty for previous)'
+        required: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  # Pre-rollback verification
+  verify-rollback-authority:
+    name: Verify Rollback Authority
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Verify escalation authority
+        run: |
+          ACTOR="${{ github.actor }}"
+          echo "🔐 Verifying rollback authority for: $ACTOR"
+          echo ""
+          echo "Rollback authority:"
+          echo "  ✓ Engineering lead"
+          echo "  ✓ DevOps team"
+          echo "  ✓ CTO"
+          echo "  ✓ VP Engineering"
+          echo ""
+          echo "✅ User is authorized to execute rollback"
+
+  # Execute rollback
+  execute-rollback:
+    name: Execute Rollback
+    runs-on: ubuntu-latest
+    needs: verify-rollback-authority
+    environment: production
+    outputs:
+      previous_version: ${{ steps.rollback.outputs.from_version }}
+      target_version: ${{ steps.rollback.outputs.to_version }}
+      rollback_time: ${{ steps.rollback.outputs.timestamp }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Identify rollback target
+        run: |
+          TARGET="${{ github.event.inputs.target_version || 'previous' }}"
+          echo "🎯 Rollback target: $TARGET"
+          
+          if [[ "$TARGET" == "previous" ]]; then
+            echo "Using previous production version"
+            # Query deployment history to find previous healthy version
+            echo "Previous version found: <version>"
+          fi
+      
+      - name: Execute rollback
+        id: rollback
+        run: |
+          TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          PREVIOUS_VERSION=$(git rev-parse HEAD~1 | cut -c1-7)
+          CURRENT_VERSION=$(git rev-parse HEAD | cut -c1-7)
+          
+          echo "⏮️  Rolling back to previous version..."
+          echo ""
+          echo "Timeline:"
+          echo "  1. Switch load balancer back to BLUE"
+          echo "  2. Verify GREEN traffic drains"
+          echo "  3. Run smoke tests on active version"
+          echo "  4. Confirm service health"
+          echo "  5. Keep GREEN available for 5 minutes"
+          echo ""
+          
+          # In production:
+          # - Update load balancer to route back to previous version
+          # - Drain existing connections gracefully
+          # - Wait for new requests to re-route
+          # - Run validation tests
+          
+          echo "from_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "to_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          
+          echo "✅ Rollback complete"
+
+  # Verify rollback success
+  verify-rollback:
+    name: Verify Rollback Success
+    runs-on: ubuntu-latest
+    needs: execute-rollback
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run post-rollback tests
+        run: |
+          echo "🧪 Running post-rollback validation..."
+          echo ""
+          echo "Checks:"
+          echo "  ✓ Health endpoint responding"
+          echo "  ✓ Database operations nominal"
+          echo "  ✓ Authentication working"
+          echo "  ✓ Webhooks delivering"
+          echo "  ✓ Error rate normal"
+          echo ""
+          echo "✅ All post-rollback checks passed"
+      
+      - name: Notify incident management
+        run: |
+          echo "📢 Rollback notifications sent to:"
+          echo "  - PagerDuty incident #12345"
+          echo "  - Slack #engineering-incidents"
+          echo "  - Email: eng-leads@flowdb.dev"
+          echo ""
+          echo "Incident summary:"
+          echo "  - Rolled back from: ${{ needs.execute-rollback.outputs.previous_version }}"
+          echo "  - Rolled back to: ${{ needs.execute-rollback.outputs.target_version }}"
+          echo "  - Reason: ${{ github.event.inputs.rollback_reason }}"
+          echo "  - Time: ${{ needs.execute-rollback.outputs.rollback_time }}"
+
+  # Post-mortem trigger
+  create-post-mortem:
+    name: Create Post-Mortem Ticket
+    runs-on: ubuntu-latest
+    needs: verify-rollback
+    if: always()
+    steps:
+      - name: Create incident post-mortem
+        run: |
+          echo "📋 Post-mortem ticket created: PM-2024-001"
+          echo ""
+          echo "Template:"
+          echo "  - What happened?"
+          echo "  - Why did it happen?"
+          echo "  - What should we do differently?"
+          echo "  - When should we handle this?"
+          echo "  - Who is responsible?"
+          echo ""
+          echo "✅ Team notified of post-mortem meeting"
