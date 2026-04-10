@@ -125,7 +125,10 @@ describe("PostgreSQLForkEngine", () => {
 
   test("listBranches returns FlowDB databases with size and createdAt", async () => {
     const engine = new ForkEngine();
-    const sourceName = `${TEST_DB_PREFIX}_list_source_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
+    const sourceName = `${TEST_DB_PREFIX}_list_source_${randomUUID().replace(/-/g, "")}`.slice(
+      0,
+      63
+    );
     await createDatabase(sourceName);
     const sourceUrl = withDatabaseName(maintenanceUrl, sourceName);
 
@@ -156,7 +159,10 @@ describe("PostgreSQLForkEngine", () => {
     const engine = new ForkEngine();
     const healthy = await engine.healthCheck(maintenanceUrl);
 
-    const invalidUrl = withDatabaseName(maintenanceUrl, `missing_${randomUUID().replace(/-/g, "")}`);
+    const invalidUrl = withDatabaseName(
+      maintenanceUrl,
+      `missing_${randomUUID().replace(/-/g, "")}`
+    );
     const unhealthy = await engine.healthCheck(invalidUrl);
 
     expect(healthy).toBe(true);

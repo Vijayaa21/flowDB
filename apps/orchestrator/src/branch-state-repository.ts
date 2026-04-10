@@ -12,7 +12,15 @@ type BranchRow = {
 };
 
 export type BranchStateRepository = {
-  upsert(ownerGithubId: string, record: { prNumber: number; branchName: string; branchDatabaseUrl: string; status: BranchStatus }): Promise<void>;
+  upsert(
+    ownerGithubId: string,
+    record: {
+      prNumber: number;
+      branchName: string;
+      branchDatabaseUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<void>;
   getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null>;
   getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null>;
   setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void>;
@@ -26,7 +34,7 @@ function mapBranchRow(row: BranchRow): BranchRecord {
     branchDatabaseUrl: row.branch_database_url,
     status: row.status,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
   };
 }
 
@@ -38,12 +46,15 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     this.pool = new Pool({ connectionString: databaseUrl });
   }
 
-  public async upsert(ownerGithubId: string, record: {
-    prNumber: number;
-    branchName: string;
-    branchDatabaseUrl: string;
-    status: BranchStatus;
-  }): Promise<void> {
+  public async upsert(
+    ownerGithubId: string,
+    record: {
+      prNumber: number;
+      branchName: string;
+      branchDatabaseUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<void> {
     await this.ensureSchema();
     await this.pool.query(
       `
@@ -60,7 +71,10 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     );
   }
 
-  public async getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null> {
+  public async getByBranchName(
+    ownerGithubId: string,
+    branchName: string
+  ): Promise<BranchRecord | null> {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
@@ -74,7 +88,10 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     return result.rows[0] ? mapBranchRow(result.rows[0]) : null;
   }
 
-  public async getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null> {
+  public async getByPrNumber(
+    ownerGithubId: string,
+    prNumber: number
+  ): Promise<BranchRecord | null> {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
@@ -89,7 +106,11 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     return result.rows[0] ? mapBranchRow(result.rows[0]) : null;
   }
 
-  public async setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void> {
+  public async setStatus(
+    ownerGithubId: string,
+    branchName: string,
+    status: BranchStatus
+  ): Promise<void> {
     await this.ensureSchema();
     await this.pool.query(
       `

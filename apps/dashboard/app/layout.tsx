@@ -10,7 +10,7 @@ type RootLayoutProps = {
 
 export const metadata = {
   title: "FlowDB Dashboard",
-  description: "Manage your database branches"
+  description: "Manage your database branches",
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {

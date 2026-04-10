@@ -7,7 +7,13 @@
 export { FlowDBClient, type SDKClientConfig } from "./client";
 
 // Error handling
-export { FlowDBError, mapHttpError, mapNetworkError, type ErrorCode, type FlowDBErrorOptions } from "./errors";
+export {
+  FlowDBError,
+  mapHttpError,
+  mapNetworkError,
+  type ErrorCode,
+  type FlowDBErrorOptions,
+} from "./errors";
 
 // Retry utilities (useful for advanced scenarios)
 export {
@@ -17,7 +23,7 @@ export {
   calculateBackoffDelay,
   sleep,
   type RetryOptions,
-  DEFAULT_RETRY_OPTIONS
+  DEFAULT_RETRY_OPTIONS,
 } from "./retry";
 
 // Export all contract types
@@ -29,5 +35,5 @@ export type {
   ListBranchesResponse,
   OperationDto,
   OperationStatus,
-  PaginationMeta
+  PaginationMeta,
 } from "./types";

@@ -11,7 +11,7 @@ const mockClient = {
 
     if (sql.includes("SELECT name FROM schema_migrations")) {
       return {
-        rows: appliedNames.map((name) => ({ name }))
+        rows: appliedNames.map((name) => ({ name })),
       };
     }
 
@@ -24,14 +24,14 @@ const mockClient = {
     }
 
     return { rows: [] };
-  })
+  }),
 };
 
 const clientCtor = vi.fn(() => mockClient);
 
 vi.mock("pg", () => {
   return {
-    Client: clientCtor
+    Client: clientCtor,
   };
 });
 
@@ -40,14 +40,14 @@ vi.mock("node:fs/promises", () => {
     readdir: vi.fn(async () => [
       {
         name: "001_init.sql",
-        isFile: () => true
+        isFile: () => true,
       },
       {
         name: "README.md",
-        isFile: () => true
-      }
+        isFile: () => true,
+      },
     ]),
-    readFile: vi.fn(async () => "CREATE TABLE IF NOT EXISTS test_table(id INTEGER);")
+    readFile: vi.fn(async () => "CREATE TABLE IF NOT EXISTS test_table(id INTEGER);"),
   };
 });
 
@@ -66,7 +66,7 @@ describe("runPendingMigrations", () => {
 
     const first = await runPendingMigrations({
       databaseUrl: "postgres://postgres:postgres@localhost:5432/postgres",
-      migrationsDir: "apps/orchestrator/migrations"
+      migrationsDir: "apps/orchestrator/migrations",
     });
 
     expect(first).toEqual(["001_init.sql"]);
@@ -77,7 +77,7 @@ describe("runPendingMigrations", () => {
 
     const second = await runPendingMigrations({
       databaseUrl: "postgres://postgres:postgres@localhost:5432/postgres",
-      migrationsDir: "apps/orchestrator/migrations"
+      migrationsDir: "apps/orchestrator/migrations",
     });
 
     expect(second).toEqual([]);

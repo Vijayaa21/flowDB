@@ -42,7 +42,7 @@ export class ForkEngine {
       branchDatabaseUrl,
       branchName,
       forkedAt,
-      durationMs
+      durationMs,
     };
   }
 
@@ -82,7 +82,7 @@ export class ForkEngine {
       return result.rows.map((row) => ({
         name: row.name,
         size: Number(row.size),
-        createdAt: new Date(row.created_at)
+        createdAt: new Date(row.created_at),
       }));
     } finally {
       await client.end();

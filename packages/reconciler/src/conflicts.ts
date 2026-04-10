@@ -48,7 +48,11 @@ function extractColumnName(value: AstNode): string | undefined {
     return normalizeIdentifier(value.column);
   }
 
-  if (isRecord(value.column) && isRecord(value.column.expr) && typeof value.column.expr.value === "string") {
+  if (
+    isRecord(value.column) &&
+    isRecord(value.column.expr) &&
+    typeof value.column.expr.value === "string"
+  ) {
     return normalizeIdentifier(value.column.expr.value);
   }
 
@@ -161,7 +165,7 @@ export function detectConflicts(
           table: ref.table,
           column: ref.column,
           branchMigration,
-          mainMigration
+          mainMigration,
         });
       }
     }

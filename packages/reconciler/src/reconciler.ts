@@ -11,7 +11,7 @@ function topologicalSort(migrations: Migration[]): Migration[] {
   const nodes = migrations.map<MigrationNode>((migration) => ({
     migration,
     createdTables: extractCreatedTables(migration.sql),
-    touchedTables: extractTouchedTables(migration.sql)
+    touchedTables: extractTouchedTables(migration.sql),
   }));
 
   const nodeById = new Map(nodes.map((node) => [node.migration.id, node]));
@@ -29,7 +29,9 @@ function topologicalSort(migrations: Migration[]): Migration[] {
         continue;
       }
 
-      const dependsOnSource = [...target.touchedTables].some((table) => source.createdTables.has(table));
+      const dependsOnSource = [...target.touchedTables].some((table) =>
+        source.createdTables.has(table)
+      );
 
       if (dependsOnSource && !outgoing.get(source.migration.id)?.has(target.migration.id)) {
         outgoing.get(source.migration.id)?.add(target.migration.id);
@@ -86,6 +88,6 @@ export function reconcile(
   return {
     safe,
     conflicts,
-    order
+    order,
   };
 }

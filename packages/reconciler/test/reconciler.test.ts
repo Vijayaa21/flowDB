@@ -8,7 +8,7 @@ function migration(id: string, sql: string): Migration {
     id,
     filename: `${id}.sql`,
     orm: "raw",
-    sql
+    sql,
   };
 }
 
@@ -19,12 +19,18 @@ describe("reconcile", () => {
         "main_create_users",
         "CREATE TABLE users (id SERIAL PRIMARY KEY, email TEXT NOT NULL, full_name TEXT);"
       ),
-      migration("main_alter_users_email", "ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(320);")
+      migration(
+        "main_alter_users_email",
+        "ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(320);"
+      ),
     ];
 
     const branchMigrations: Migration[] = [
       migration("branch_alter_users_email", "ALTER TABLE users ADD COLUMN email TEXT;"),
-      migration("branch_alter_users_full_name", "ALTER TABLE users ALTER COLUMN full_name TYPE VARCHAR(255);")
+      migration(
+        "branch_alter_users_full_name",
+        "ALTER TABLE users ALTER COLUMN full_name TYPE VARCHAR(255);"
+      ),
     ];
 
     const result = reconcile(branchMigrations, mainMigrations);

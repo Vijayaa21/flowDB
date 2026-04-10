@@ -15,15 +15,18 @@ export class VercelSdkClient implements VercelClient {
     this.client = new SdkClass({ bearerToken: apiToken });
   }
 
-  public async injectDeploymentDatabaseUrl(deploymentId: string, databaseUrl: string): Promise<void> {
+  public async injectDeploymentDatabaseUrl(
+    deploymentId: string,
+    databaseUrl: string
+  ): Promise<void> {
     if (this.client.deployments?.createDeploymentEnv) {
       await this.client.deployments.createDeploymentEnv({
         id: deploymentId,
         requestBody: {
           key: "DATABASE_URL",
           value: databaseUrl,
-          type: "plain"
-        }
+          type: "plain",
+        },
       });
       return;
     }
@@ -33,9 +36,9 @@ export class VercelSdkClient implements VercelClient {
         id: deploymentId,
         requestBody: {
           env: {
-            DATABASE_URL: databaseUrl
-          }
-        }
+            DATABASE_URL: databaseUrl,
+          },
+        },
       });
       return;
     }

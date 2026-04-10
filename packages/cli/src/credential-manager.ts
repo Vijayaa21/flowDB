@@ -25,7 +25,7 @@ export class CredentialManager {
     this.ensureConfigDir();
     const data: Credentials = {
       ...credentials,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     fs.writeFileSync(this.credentialsFile, JSON.stringify(data, null, 2));
   }

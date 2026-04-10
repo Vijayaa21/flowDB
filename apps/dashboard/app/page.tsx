@@ -5,7 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 
-import { api, readDashboardConfig, saveDashboardConfig, type Branch, type DashboardConfig } from "../lib/api";
+import {
+  api,
+  readDashboardConfig,
+  saveDashboardConfig,
+  type Branch,
+  type DashboardConfig,
+} from "../lib/api";
 import { queryKeys } from "../lib/query-keys";
 
 type SectionKey = "branches" | "settings";
@@ -69,7 +75,7 @@ function StatusBadge({ status }: { status: string }) {
         ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200"
         : normalized === "CONFLICT"
           ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-            : "bg-(--gh-canvas-subtle) text-(--gh-fg-muted)";
+          : "bg-(--gh-canvas-subtle) text-(--gh-fg-muted)";
 
   return <span className={`rounded-full px-2 py-1 text-xs font-medium ${cls}`}>{normalized}</span>;
 }
@@ -80,7 +86,7 @@ function BranchHealthFeed({
   isError,
   deletingBranch,
   onRetry,
-  onTeardown
+  onTeardown,
 }: {
   data: Branch[];
   isLoading: boolean;
@@ -158,13 +164,13 @@ export default function HomePage() {
   const branchesQuery = useQuery({
     queryKey: queryKeys.branches(config),
     queryFn: () => api.branches.list(config),
-    refetchInterval: 30000
+    refetchInterval: 30000,
   });
 
   const healthQuery = useQuery({
     queryKey: queryKeys.health(config),
     queryFn: () => api.health.check(config),
-    refetchInterval: 60000
+    refetchInterval: 60000,
   });
 
   useEffect(() => {
@@ -181,9 +187,10 @@ export default function HomePage() {
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("flowdb-theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const mode: ThemeMode = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system"
-      ? savedTheme
-      : "system";
+    const mode: ThemeMode =
+      savedTheme === "light" || savedTheme === "dark" || savedTheme === "system"
+        ? savedTheme
+        : "system";
     const shouldUseDark = mode === "system" ? prefersDark : mode === "dark";
     setThemeMode(mode);
     document.documentElement.classList.toggle("dark", shouldUseDark);
@@ -192,17 +199,23 @@ export default function HomePage() {
   const branches = branchesQuery.data ?? [];
   const stats = useMemo(() => {
     const totalBranches = branches.length;
-    const activeMigrations = branches.filter((branch) => statusUpper(branch.status) === "MIGRATING").length;
-    const conflictAlerts = branches.filter((branch) => statusUpper(branch.status) === "CONFLICT").length;
+    const activeMigrations = branches.filter(
+      (branch) => statusUpper(branch.status) === "MIGRATING"
+    ).length;
+    const conflictAlerts = branches.filter(
+      (branch) => statusUpper(branch.status) === "CONFLICT"
+    ).length;
     return [
       { label: "Total Branches", value: String(totalBranches) },
       { label: "Active Migrations", value: String(activeMigrations) },
-      { label: "Conflict Alerts", value: String(conflictAlerts) }
+      { label: "Conflict Alerts", value: String(conflictAlerts) },
     ];
   }, [branches]);
 
   const lastUpdatedSeconds =
-    branchesQuery.dataUpdatedAt > 0 ? Math.max(0, Math.floor((now - branchesQuery.dataUpdatedAt) / 1000)) : 0;
+    branchesQuery.dataUpdatedAt > 0
+      ? Math.max(0, Math.floor((now - branchesQuery.dataUpdatedAt) / 1000))
+      : 0;
 
   const isConnected = healthQuery.isSuccess && healthQuery.data.status === "ok";
 
@@ -233,7 +246,7 @@ export default function HomePage() {
 
     const nextConfig = saveDashboardConfig({
       ...draftConfig,
-      orchestratorUrl: orchestratorValue
+      orchestratorUrl: orchestratorValue,
     });
 
     setConfig(nextConfig);
@@ -298,7 +311,6 @@ export default function HomePage() {
           <div className="border-t border-(--gh-border-default) px-2 pt-4 lg:px-4">
             <div className="mb-3 hidden items-center gap-3 rounded-xl border border-(--gh-border-default) p-2 lg:flex">
               {userAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={userAvatar}
                   alt={userName}
@@ -319,9 +331,7 @@ export default function HomePage() {
 
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-(--gh-border-default) px-2 py-2 text-xs">
               <span
-                className={`h-2 w-2 rounded-full ${
-                  isConnected ? "bg-emerald-500" : "bg-red-500"
-                }`}
+                className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500" : "bg-red-500"}`}
               />
               <span className="text-(--gh-fg-muted)">
                 {isConnected ? "Connected" : "Orchestrator offline"}
@@ -359,11 +369,17 @@ export default function HomePage() {
           <header className="mb-6 rounded-2xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="m-0 text-xl font-semibold text-(--gh-fg-default)">FlowDB Dashboard</h1>
-                <p className="mt-1 text-sm text-(--gh-fg-muted)">Orchestrator: {config.orchestratorUrl}</p>
+                <h1 className="m-0 text-xl font-semibold text-(--gh-fg-default)">
+                  FlowDB Dashboard
+                </h1>
+                <p className="mt-1 text-sm text-(--gh-fg-muted)">
+                  Orchestrator: {config.orchestratorUrl}
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                <p className="text-xs text-(--gh-fg-muted)">Last updated {lastUpdatedSeconds}s ago</p>
+                <p className="text-xs text-(--gh-fg-muted)">
+                  Last updated {lastUpdatedSeconds}s ago
+                </p>
                 <button
                   type="button"
                   onClick={() => void branchesQuery.refetch()}
@@ -384,14 +400,18 @@ export default function HomePage() {
                     className="rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4"
                   >
                     <p className="text-sm text-(--gh-fg-muted)">{stat.label}</p>
-                    <p className="mt-2 text-3xl font-semibold text-(--gh-fg-default)">{stat.value}</p>
+                    <p className="mt-2 text-3xl font-semibold text-(--gh-fg-default)">
+                      {stat.value}
+                    </p>
                   </article>
                 ))}
           </section>
 
           {activeSection === "branches" ? (
             <section className="mt-6">
-              <h2 className="mb-3 text-base font-medium text-(--gh-fg-default)">Branch Health Feed</h2>
+              <h2 className="mb-3 text-base font-medium text-(--gh-fg-default)">
+                Branch Health Feed
+              </h2>
               <BranchHealthFeed
                 data={branches}
                 isLoading={branchesQuery.isLoading}
@@ -406,7 +426,9 @@ export default function HomePage() {
           ) : (
             <section className="mt-6 rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-5">
               <h2 className="m-0 text-base font-medium text-(--gh-fg-default)">Settings</h2>
-              <p className="mt-2 text-sm text-(--gh-fg-muted)">Configure project/environment and dashboard appearance.</p>
+              <p className="mt-2 text-sm text-(--gh-fg-muted)">
+                Configure project/environment and dashboard appearance.
+              </p>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="text-sm text-(--gh-fg-muted)">
                   Orchestrator URL
@@ -414,7 +436,10 @@ export default function HomePage() {
                     type="text"
                     value={draftConfig.orchestratorUrl}
                     onChange={(event) =>
-                      setDraftConfig((current) => ({ ...current, orchestratorUrl: event.target.value }))
+                      setDraftConfig((current) => ({
+                        ...current,
+                        orchestratorUrl: event.target.value,
+                      }))
                     }
                     className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
                     placeholder="http://localhost:3000"
@@ -468,13 +493,17 @@ export default function HomePage() {
                   Save Settings
                 </button>
               </div>
-              <p className="mt-4 text-sm text-(--gh-fg-muted)">Choose the dashboard appearance theme.</p>
+              <p className="mt-4 text-sm text-(--gh-fg-muted)">
+                Choose the dashboard appearance theme.
+              </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {([
-                  { key: "light", label: "Light" },
-                  { key: "dark", label: "Dark" },
-                  { key: "system", label: "System" }
-                ] as const).map((mode) => (
+                {(
+                  [
+                    { key: "light", label: "Light" },
+                    { key: "dark", label: "Dark" },
+                    { key: "system", label: "System" },
+                  ] as const
+                ).map((mode) => (
                   <button
                     key={mode.key}
                     type="button"

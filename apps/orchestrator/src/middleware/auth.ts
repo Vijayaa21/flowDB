@@ -8,7 +8,10 @@ type JwtPayload = {
 };
 
 function base64UrlDecode(input: string): string {
-  const padded = input.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(input.length / 4) * 4, "=");
+  const padded = input
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(input.length / 4) * 4, "=");
   return Buffer.from(padded, "base64").toString("utf8");
 }
 
@@ -49,7 +52,10 @@ function verifyJwt(token: string, secret: string): JwtPayload | null {
   }
 }
 
-export const authMiddleware: MiddlewareHandler<{ Variables: { githubId: string } }> = async (c, next) => {
+export const authMiddleware: MiddlewareHandler<{ Variables: { githubId: string } }> = async (
+  c,
+  next
+) => {
   const header = c.req.header("authorization");
   const secret = process.env.AUTH_SECRET;
 
