@@ -7,7 +7,7 @@ import type {
   BranchDto,
   CreateBranchResponse,
   HealthResponse,
-  ListBranchesResponse
+  ListBranchesResponse,
 } from "./types";
 import { FlowDBError, mapHttpError, mapNetworkError } from "./errors";
 import { withTimeoutAndRetry, type RetryOptions } from "./retry";
@@ -31,7 +31,7 @@ export class FlowDBClient {
       orgSlug: config.orgSlug,
       projectSlug: config.projectSlug,
       timeoutMs: config.timeoutMs ?? 30000,
-      retryOptions: config.retryOptions ?? {}
+      retryOptions: config.retryOptions ?? {},
     };
   }
 
@@ -42,7 +42,7 @@ export class FlowDBClient {
   private getTenantHeaders(): Record<string, string> {
     return {
       "x-org-slug": this.config.orgSlug,
-      "x-project-slug": this.config.projectSlug
+      "x-project-slug": this.config.projectSlug,
     };
   }
 
@@ -57,14 +57,14 @@ export class FlowDBClient {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
           "x-api-key": this.config.apiKey,
-          ...this.getTenantHeaders()
+          ...this.getTenantHeaders(),
         };
 
         try {
           const response = await fetch(url, {
             method: options.method,
             headers,
-            body: options.body ? JSON.stringify(options.body) : undefined
+            body: options.body ? JSON.stringify(options.body) : undefined,
           });
 
           if (!response.ok) {
@@ -85,7 +85,7 @@ export class FlowDBClient {
           throw new FlowDBError({
             code: "UNKNOWN",
             message: "An unknown error occurred",
-            originalError: error instanceof Error ? error : undefined
+            originalError: error instanceof Error ? error : undefined,
           });
         }
       },
@@ -95,7 +95,9 @@ export class FlowDBClient {
   }
 
   public async health(): Promise<HealthResponse> {
-    const url = this.config.apiUrl.endsWith("/") ? this.config.apiUrl.slice(0, -1) : this.config.apiUrl;
+    const url = this.config.apiUrl.endsWith("/")
+      ? this.config.apiUrl.slice(0, -1)
+      : this.config.apiUrl;
     try {
       const response = await fetch(`${url}/health`);
       if (!response.ok) {
@@ -110,7 +112,10 @@ export class FlowDBClient {
     }
   }
 
-  public async listBranches(options?: { limit?: number; cursor?: string }): Promise<ListBranchesResponse> {
+  public async listBranches(options?: {
+    limit?: number;
+    cursor?: string;
+  }): Promise<ListBranchesResponse> {
     const params = new URLSearchParams();
     if (options?.limit) params.set("limit", String(options.limit));
     if (options?.cursor) params.set("cursor", options.cursor);
@@ -121,7 +126,7 @@ export class FlowDBClient {
   public async getBranch(branchName: string): Promise<BranchDto> {
     return this.request<BranchDto>({
       method: "GET",
-      endpoint: `/branches/${encodeURIComponent(branchName)}`
+      endpoint: `/branches/${encodeURIComponent(branchName)}`,
     });
   }
 
@@ -136,15 +141,15 @@ export class FlowDBClient {
       body: {
         branchName: options.branchName,
         idempotencyKey: options.idempotencyKey,
-        sourceDatabaseUrl: options.sourceDatabaseUrl
-      }
+        sourceDatabaseUrl: options.sourceDatabaseUrl,
+      },
     });
   }
 
   public async deleteBranch(branchName: string): Promise<void> {
     await this.request<void>({
       method: "DELETE",
-      endpoint: `/branches/${encodeURIComponent(branchName)}`
+      endpoint: `/branches/${encodeURIComponent(branchName)}`,
     });
   }
 
@@ -163,7 +168,7 @@ export class FlowDBClient {
 
       throw new FlowDBError({
         code: "BAD_REQUEST",
-        message: `Missing required environment variables: ${missing.join(", ")}`
+        message: `Missing required environment variables: ${missing.join(", ")}`,
       });
     }
 

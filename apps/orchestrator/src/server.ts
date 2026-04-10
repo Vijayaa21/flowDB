@@ -7,11 +7,11 @@ import { PostgreSQLForkEngine, type BranchInfo, type ForkResult } from "@flowdb/
 import {
   NoopGithubCommentPublisher,
   OctokitGithubCommentPublisher,
-  type GithubCommentPublisher
+  type GithubCommentPublisher,
 } from "./github-pr-comments";
 import {
   PostgresBranchStateRepository,
-  type BranchStateRepository
+  type BranchStateRepository,
 } from "./branch-state-repository";
 import { runPendingMigrations, type MigrationRunReport } from "./migration-runner";
 import { githubPullRequestSchema, githubPushSchema, vercelWebhookSchema } from "./schemas";
@@ -54,7 +54,7 @@ function createInMemoryWebhookReplayCache(): WebhookReplayCache {
     record(deliveryId: string): void {
       pruneExpired();
       deliveries.set(deliveryId, Date.now());
-    }
+    },
   };
 }
 
@@ -110,7 +110,7 @@ function createRequestMetrics(): RequestMetrics {
     byMethod: {},
     byStatus: {},
     byStatusClass: {},
-    byPath: {}
+    byPath: {},
   };
 }
 
@@ -124,7 +124,7 @@ function createWebhookMetrics(): WebhookMetrics {
     githubByAction: {},
     vercelTotal: 0,
     vercelInvalidPayloads: 0,
-    vercelPreviewReady: 0
+    vercelPreviewReady: 0,
   };
 }
 
@@ -134,7 +134,7 @@ function createBackgroundTaskMetrics(): BackgroundTaskMetrics {
     succeeded: 0,
     failed: 0,
     totalDurationMs: 0,
-    byName: {}
+    byName: {},
   };
 }
 
@@ -179,7 +179,7 @@ function createDefaultDependencies(): OrchestratorDependencies {
       setTimeout(() => {
         void task();
       }, 0);
-    }
+    },
   };
 }
 
@@ -217,9 +217,9 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           setTimeout(() => {
             void task();
           }, 0);
-        })
+        }),
     }),
-    ...partialDeps
+    ...partialDeps,
   } as OrchestratorDependencies;
 
   const app = new Hono<{ Variables: { githubId: string; requestId: string } }>();
@@ -244,7 +244,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
             level: "error",
             event: "background_task_failed",
             taskName: name,
-            error: error instanceof Error ? error.message : "Unknown error"
+            error: error instanceof Error ? error.message : "Unknown error",
           })
         );
       } finally {
@@ -259,7 +259,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     cors({
       origin: ["http://localhost:4010", "http://localhost:3001"],
       allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"]
+      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
     })
   );
 
@@ -302,7 +302,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           githubId,
           orgSlug,
           projectSlug,
-          environment
+          environment,
         })
       );
     }
@@ -314,14 +314,15 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         status: "ok",
         requestId: c.get("requestId") as string,
         version: deps.version,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       },
       200
     );
   });
 
   app.get("/metrics", (c) => {
-    const avgDurationMs = metrics.totalRequests > 0 ? metrics.totalDurationMs / metrics.totalRequests : 0;
+    const avgDurationMs =
+      metrics.totalRequests > 0 ? metrics.totalDurationMs / metrics.totalRequests : 0;
 
     return c.json(
       {
@@ -338,11 +339,12 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           ...backgroundTaskMetrics,
           avgDurationMs:
             backgroundTaskMetrics.scheduled > 0
-              ? Math.round((backgroundTaskMetrics.totalDurationMs / backgroundTaskMetrics.scheduled) * 100) /
-                100
-              : 0
+              ? Math.round(
+                  (backgroundTaskMetrics.totalDurationMs / backgroundTaskMetrics.scheduled) * 100
+                ) / 100
+              : 0,
         },
-        requestId: c.get("requestId") as string
+        requestId: c.get("requestId") as string,
       },
       200
     );
@@ -429,7 +431,10 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       if (payload.action === "opened" || payload.action === "reopened") {
         runBackgroundTask("github.pull_request.open_or_reopen", async () => {
           const byPr = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
-          const byBranch = await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref);
+          const byBranch = await deps.branches.getByBranchName(
+            githubId,
+            payload.pull_request.head.ref
+          );
           const existing = byPr ?? byBranch;
 
           // Ignore duplicate delivery for already-active branch records.
@@ -445,7 +450,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
             prNumber: payload.pull_request.number,
             branchName: payload.pull_request.head.ref,
             branchDatabaseUrl: branchDatabaseUrl.branchDatabaseUrl,
-            status: "active"
+            status: "active",
           });
         });
       }
@@ -454,7 +459,8 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         runBackgroundTask("github.pull_request.closed", async () => {
           const existing = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
           const target =
-            existing ?? (await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref));
+            existing ??
+            (await deps.branches.getByBranchName(githubId, payload.pull_request.head.ref));
           if (!target) {
             return;
           }
@@ -488,7 +494,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           applied: [],
           pending: [],
           schemaDiffSummary: "No migrations were applied.",
-          conflicts: []
+          conflicts: [],
         };
         let status = "active";
 
@@ -511,8 +517,8 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
               branchDbStatus: status,
               pendingMigrations: report.pending,
               schemaDiffSummary: report.schemaDiffSummary,
-              conflicts: report.conflicts
-            }
+              conflicts: report.conflicts,
+            },
           });
         }
       });
@@ -540,8 +546,12 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       webhookMetrics.vercelPreviewReady += 1;
       runBackgroundTask("vercel.deployment.ready.preview", async () => {
         const githubId = c.get("githubId") as string;
-        const branchName = (deployment.meta?.githubCommitRef ?? payload.payload?.git?.branch) as string | undefined;
-        const branch = branchName ? await deps.branches.getByBranchName(githubId, branchName as string) : null;
+        const branchName = (deployment.meta?.githubCommitRef ?? payload.payload?.git?.branch) as
+          | string
+          | undefined;
+        const branch = branchName
+          ? await deps.branches.getByBranchName(githubId, branchName as string)
+          : null;
         const databaseUrl = branch?.branchDatabaseUrl ?? deps.sourceDatabaseUrl;
         if (deployment.id) {
           await deps.vercel.injectDeploymentDatabaseUrl(deployment.id as string, databaseUrl);

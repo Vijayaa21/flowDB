@@ -1,4 +1,4 @@
-declare module 'autocannon' {
+declare module "autocannon" {
   type RequestConfig = {
     path: string;
     method?: string;

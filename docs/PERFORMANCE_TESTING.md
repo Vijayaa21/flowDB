@@ -25,12 +25,12 @@ Database Query Performance:
 
 ### Degradation Thresholds
 
-| Metric | Green | Yellow | Red |
-|--------|-------|--------|-----|
-| P99 Latency | < 500ms | 500-1000ms | > 1000ms |
-| Error Rate | < 0.5% | 0.5-2% | > 2% |
-| Webhook Success | > 99.5% | 95-99.5% | < 95% |
-| Database Errors | 0-5/hr | 5-20/hr | > 20/hr |
+| Metric          | Green   | Yellow     | Red      |
+| --------------- | ------- | ---------- | -------- |
+| P99 Latency     | < 500ms | 500-1000ms | > 1000ms |
+| Error Rate      | < 0.5%  | 0.5-2%     | > 2%     |
+| Webhook Success | > 99.5% | 95-99.5%   | < 95%    |
+| Database Errors | 0-5/hr  | 5-20/hr    | > 20/hr  |
 
 ## Test Types
 
@@ -39,18 +39,21 @@ Database Query Performance:
 **Purpose**: Validate performance under realistic sustained load
 
 **Parameters**:
+
 - Connections: 100-500 concurrent users
 - Duration: 30-120 seconds
 - Request rate: 100-500 RPS (requests/second)
 - Endpoints: Mixed (health, metrics, branch operations, webhooks)
 
 **Success Criteria**:
+
 - P99 latency < 500ms
 - Error rate < 0.5%
 - Zero timeouts
 - No memory growth > 10%
 
 **Running Baseline Load Test**:
+
 ```bash
 cd packages/load-tester
 npm run load-test
@@ -67,18 +70,21 @@ npm run load-test
 **Purpose**: Validate system behavior under sudden 10x traffic increase
 
 **Parameters**:
+
 - Connections: 500-1000 concurrent
 - Duration: 30 seconds
 - Request rate: 1000+ RPS
 - Focus: API responsiveness, graceful degradation
 
 **Success Criteria**:
+
 - P99 latency < 1000ms (vs 500ms baseline)
 - Error rate < 2% (vs 0.5% baseline)
 - Auto-scaling triggered (if applicable)
 - No cascading failures
 
 **Test Procedure**:
+
 ```bash
 npm run load-test -- --spike
 
@@ -94,12 +100,14 @@ npm run load-test -- --spike
 **Purpose**: Detect memory leaks, connection pool exhaustion, resource degradation
 
 **Parameters**:
+
 - Connections: 100-200 concurrent
 - Duration: 4-24 hours
-- Request rate: 50-100 RPS  
+- Request rate: 50-100 RPS
 - Monitoring: Memory, CPU, disk I/O trends
 
 **Success Criteria**:
+
 - Memory growth < 5% over test duration
 - Error rate stable at < 0.5%
 - No slowdown in latency percentiles
@@ -108,18 +116,21 @@ npm run load-test -- --spike
 **Soak Test Variants**:
 
 #### Quick Soak (1 hour)
+
 ```bash
 npm run soak-test -- quick
 # Daily verification before production release
 ```
 
 #### Morning Soak (4 hours)
+
 ```bash
 npm run soak-test -- morning
 # Run overnight, verify before business hours
 ```
 
 #### Extended Soak (24 hours)
+
 ```bash
 npm run soak-test -- extended
 # Pre-production certification
@@ -127,6 +138,7 @@ npm run soak-test -- extended
 ```
 
 **Interpreting Results**:
+
 ```
 ✅ Memory stable (< 2% growth)     → System healthy
 ⚠️  Memory grows 5-10%               → Possible leak, observe more
@@ -138,18 +150,21 @@ npm run soak-test -- extended
 **Purpose**: Determine maximum sustainable load and breaking points
 
 **Parameters**:
+
 - Connections: 5000+ concurrent
 - Duration: 60+ seconds
 - Request rate: Unbounded
 - Endpoints: All critical paths
 
 **When to Run**:
+
 - Before major version releases
 - After infrastructure changes
 - After capacity increase claims
 - NOT in production
 
 **Expected Behavior**:
+
 ```
 Connections → 1000    RPS ↑ to peak
 Connections → 2000    RPS stable
@@ -158,6 +173,7 @@ Connections → 10000   Errors appear, P99 latency spikes
 ```
 
 **Interpreting Stress Test**:
+
 ```
 Saturation Point: ~5000 concurrent = system max capacity
 Max Throughput: ~2000 RPS at saturation
@@ -170,6 +186,7 @@ Recovery: Full recovery within 30 seconds of load drop
 ### Established Baselines (Post-Step 9)
 
 **Health Check Endpoint**:
+
 ```
 GET /health
 Response Time: 5-10ms
@@ -178,14 +195,16 @@ Error Rate: 0%
 ```
 
 **Metrics Endpoint**:
+
 ```
 GET /metrics
 Response Time: 20-50ms
-Throughput: 5000 RPS  
+Throughput: 5000 RPS
 Size: ~2KB
 ```
 
 **Branch List Endpoint**:
+
 ```
 GET /branches
 Response Time: 50-200ms (varies with branch count)
@@ -194,6 +213,7 @@ DB Query Time: 40-180ms
 ```
 
 **Branch Create Endpoint**:
+
 ```
 POST /branches
 Response Time: 2000-5000ms (fork operation)
@@ -212,7 +232,7 @@ npm run load-test
 
 # This runs:
 # 1. Baseline (30s, 100 conns)
-# 2. Sustained (120s, 200 conns)  
+# 2. Sustained (120s, 200 conns)
 # 3. Spike (30s, 1000 conns)
 
 # Expected: All tests PASS, P99 < 500ms
@@ -258,6 +278,7 @@ npm run load-test --environment production
 ### Key Metrics to Watch
 
 **Real-time Dashboard**:
+
 ```
 URL: http://localhost:3000/metrics
 
@@ -272,6 +293,7 @@ Watch for:
 ```
 
 **System-level Monitoring**:
+
 ```bash
 # In separate terminal
 watch -n 1 'ps aux | grep orchestrator | head -1'
@@ -282,6 +304,7 @@ top -p <orchestrator-pid>
 ```
 
 **Database Monitoring**:
+
 ```bash
 # Check active connections
 psql $DATABASE_URL -c "
@@ -296,6 +319,7 @@ psql $DATABASE_URL -c "
 ### What to Optimize
 
 **If P99 Latency High (> 500ms)**:
+
 1. Check database query performance (slow query log)
 2. Review application code for sync operations
 3. Check for N+1 queries
@@ -303,6 +327,7 @@ psql $DATABASE_URL -c "
 5. Consider caching frequently accessed data
 
 **If Error Rate High (> 0.5%)**:
+
 1. Check application logs for error patterns
 2. Review database connection exhaustion
 3. Check rate limiting (too aggressive?)
@@ -310,6 +335,7 @@ psql $DATABASE_URL -c "
 5. Monitor third-party service availability
 
 **If Memory Growing (> 5%)**:
+
 1. Heap profiling to find leaks
 2. Review cache invalidation logic
 3. Check for growing data structures
@@ -319,6 +345,7 @@ psql $DATABASE_URL -c "
 ### Tools & Commands
 
 **Heap Profile (Node.js)**:
+
 ```bash
 # Enable inspection
 node --inspect app.js
@@ -332,6 +359,7 @@ node --inspect app.js
 ```
 
 **Database Query Analysis**:
+
 ```bash
 # Find slow queries
 psql $DATABASE_URL -c "
@@ -347,6 +375,7 @@ SELECT * FROM branches WHERE user_id = $1;
 ```
 
 **Application Profiling**:
+
 ```bash
 # Using autocannon to identify slow endpoints
 npm run load-test -- --output-format json > results.json
@@ -361,17 +390,20 @@ jq '.requests | group_by(.path) | map({
 ## Release Gates
 
 ### Pre-Canary Gate
+
 - [ ] Baseline load test passes (P99 < 500ms)
 - [ ] Spike test passes (P99 < 1000ms)
 - [ ] Error rate < 0.5%
 
 ### Pre-Production Gate
+
 - [ ] Morning soak test (4 hours) passes
 - [ ] All performance targets met
 - [ ] Memory growth < 5%
 - [ ] No new slow queries introduced
 
 ### Post-Deployment Gate
+
 - [ ] Production metrics match staging baseline ±10%
 - [ ] Error rate normal (< 0.5%)
 - [ ] No performance regression detected
@@ -379,6 +411,7 @@ jq '.requests | group_by(.path) | map({
 ## Benchmarking Against Previous Releases
 
 **Tracking Performance Trends**:
+
 ```
 Version | P99 Latency | Throughput | Error Rate | Memory (avg)
 --------|-------------|------------|------------|-------------
@@ -388,6 +421,7 @@ Version | P99 Latency | Throughput | Error Rate | Memory (avg)
 ```
 
 **Regression Definition**:
+
 - P99 latency increase > 20%
 - Throughput decrease > 10%
 - Error rate increase > 50%
@@ -398,6 +432,7 @@ If regression detected, investigate before release.
 ## Performance Budget
 
 **API Response Budget** (Time available per request):
+
 ```
 User perceives action: 100ms
 Browser RTT (network): 30ms
@@ -409,12 +444,14 @@ Server processing budget: 70ms
 ```
 
 **Exceeding budget**:
+
 - P99 latency > 500ms = violates SLO
 - Requires investigation and optimization
 
 ## Emergency Performance Response
 
 **If P99 Latency > 1000ms in Production**:
+
 1. Check current error rate
 2. Review recent deployments
 3. Check database connection status

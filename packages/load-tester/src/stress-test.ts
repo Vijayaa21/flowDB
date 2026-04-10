@@ -1,13 +1,13 @@
-import autocannon from 'autocannon';
-import chalk from 'chalk';
+import autocannon from "autocannon";
+import chalk from "chalk";
 
 /**
  * Stress Testing for FlowDB
- * 
+ *
  * Stress test = push system to breaking point to find maximum capacity
  */
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
+const API_BASE = process.env.API_URL || "http://localhost:3000";
 
 interface StressPhase {
   connections: number;
@@ -16,19 +16,19 @@ interface StressPhase {
 }
 
 const phases: StressPhase[] = [
-  { connections: 500, duration: 30, label: 'Phase 1: 500 connections' },
-  { connections: 1000, duration: 30, label: 'Phase 2: 1000 connections' },
-  { connections: 2000, duration: 30, label: 'Phase 3: 2000 connections' },
-  { connections: 3000, duration: 30, label: 'Phase 4: 3000 connections' },
-  { connections: 5000, duration: 30, label: 'Phase 5: 5000 connections (stress)' },
-  { connections: 10000, duration: 30, label: 'Phase 6: 10000 connections (breaking)' },
+  { connections: 500, duration: 30, label: "Phase 1: 500 connections" },
+  { connections: 1000, duration: 30, label: "Phase 2: 1000 connections" },
+  { connections: 2000, duration: 30, label: "Phase 3: 2000 connections" },
+  { connections: 3000, duration: 30, label: "Phase 4: 3000 connections" },
+  { connections: 5000, duration: 30, label: "Phase 5: 5000 connections (stress)" },
+  { connections: 10000, duration: 30, label: "Phase 6: 10000 connections (breaking)" },
 ];
 
 async function runStressTest(): Promise<void> {
-  console.log(chalk.cyan.bold('💪 FlowDB Stress Test\n'));
+  console.log(chalk.cyan.bold("💪 FlowDB Stress Test\n"));
   console.log(`API URL: ${API_BASE}`);
   console.log(`Objective: Find maximum capacity and breaking point\n`);
-  console.log(chalk.yellow('⚠️  This test will push the system to its limits!\n'));
+  console.log(chalk.yellow("⚠️  This test will push the system to its limits!\n"));
 
   const results: Array<{
     connections: number;
@@ -65,11 +65,13 @@ async function runStressTest(): Promise<void> {
 
       // Early exit if too many errors
       if (errorRate > 20) {
-        console.log(chalk.red('\n  ⚠️  High error rate reached - ending stress test'));
+        console.log(chalk.red("\n  ⚠️  High error rate reached - ending stress test"));
         break;
       }
     } catch (error) {
-      console.log(chalk.red(`  ❌ Test failed: ${error instanceof Error ? error.message : String(error)}`));
+      console.log(
+        chalk.red(`  ❌ Test failed: ${error instanceof Error ? error.message : String(error)}`)
+      );
       results.push({
         connections: phase.connections,
         throughput: 0,
@@ -82,31 +84,33 @@ async function runStressTest(): Promise<void> {
   }
 
   // Analysis
-  console.log(chalk.cyan.bold('\n\n📊 Stress Test Results\n'));
-  console.log(chalk.dim('Connections | Throughput | P99 Latency | Error Rate'));
-  console.log(chalk.dim('-'.repeat(60)));
+  console.log(chalk.cyan.bold("\n\n📊 Stress Test Results\n"));
+  console.log(chalk.dim("Connections | Throughput | P99 Latency | Error Rate"));
+  console.log(chalk.dim("-".repeat(60)));
 
   for (const result of results) {
     const throughput = result.throughput.toFixed(2).padEnd(11);
-    const p99 = result.p99.toFixed(0).padStart(10) + 'ms';
-    const errorRate = result.errorRate.toFixed(2).padStart(10) + '%';
+    const p99 = result.p99.toFixed(0).padStart(10) + "ms";
+    const errorRate = result.errorRate.toFixed(2).padStart(10) + "%";
 
     console.log(`${String(result.connections).padEnd(12)} ${throughput} ${p99} ${errorRate}`);
   }
 
-  console.log(chalk.dim('-'.repeat(60)));
+  console.log(chalk.dim("-".repeat(60)));
 
   // Find saturation point
   if (results.length === 0) {
-    console.log(chalk.red('No stress test results were collected'));
+    console.log(chalk.red("No stress test results were collected"));
     process.exit(1);
   }
   const sortedByThroughput = [...results].sort((a, b) => b.throughput - a.throughput);
   const maxThroughput = sortedByThroughput[0]!;
   const saturationPoint = maxThroughput.connections;
 
-  console.log(chalk.cyan.bold('\n📈 Key Findings\n'));
-  console.log(`Maximum Throughput: ${maxThroughput.throughput.toFixed(2)} req/s at ${saturationPoint} connections`);
+  console.log(chalk.cyan.bold("\n📈 Key Findings\n"));
+  console.log(
+    `Maximum Throughput: ${maxThroughput.throughput.toFixed(2)} req/s at ${saturationPoint} connections`
+  );
 
   // Find error threshold
   const errorThreshold = results.find((r) => r.errorRate > 1.0);
@@ -115,21 +119,21 @@ async function runStressTest(): Promise<void> {
   }
 
   // Recommendations
-  console.log(chalk.dim('\n💡 Recommendations\n'));
+  console.log(chalk.dim("\n💡 Recommendations\n"));
   console.log(`1. System can sustain ~${maxThroughput.throughput.toFixed(0)} requests/second`);
   console.log(`2. Saturation point: ~${saturationPoint} concurrent connections`);
   console.log(`3. Set auto-scaling trigger at: ${Math.floor(saturationPoint * 0.7)} connections`);
   console.log(`4. Set critical alert at: ${Math.floor(saturationPoint * 0.9)} connections`);
 
   if (maxThroughput.throughput < 500) {
-    console.log('\n⚠️  Performance is below target (500+ req/s) - optimization recommended');
+    console.log("\n⚠️  Performance is below target (500+ req/s) - optimization recommended");
   }
 
-  console.log(chalk.blue.bold('\n✅ Stress test complete!\n'));
+  console.log(chalk.blue.bold("\n✅ Stress test complete!\n"));
   process.exit(0);
 }
 
 runStressTest().catch((err) => {
-  console.error(chalk.red('Fatal error:'), err);
+  console.error(chalk.red("Fatal error:"), err);
   process.exit(1);
 });

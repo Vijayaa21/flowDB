@@ -1,8 +1,8 @@
-import chalk from 'chalk';
+import chalk from "chalk";
 
 /**
  * Soak Testing Suite for FlowDB
- * 
+ *
  * Soak test = sustained load over extended period to detect:
  * - Memory leaks
  * - Connection pooling issues
@@ -25,7 +25,7 @@ interface SoakMetrics {
   errorRate: number;
   avgLatency: number;
   peakLatency: number;
-  status: 'PASS' | 'FAIL';
+  status: "PASS" | "FAIL";
   memoryGrowth?: {
     start: number;
     end: number;
@@ -33,8 +33,8 @@ interface SoakMetrics {
   };
 }
 
-const API_BASE = process.env.API_URL || 'http://localhost:3000';
-const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+const API_BASE = process.env.API_URL || "http://localhost:3000";
+const AUTH_TOKEN = process.env.AUTH_TOKEN || "";
 
 /**
  * Run sustained load for monitoring degradation
@@ -52,7 +52,7 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
     errorRate: 0,
     avgLatency: 0,
     peakLatency: 0,
-    status: 'PASS',
+    status: "PASS",
   };
 
   let latencies: number[] = [];
@@ -64,7 +64,7 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
     try {
       const response = await fetch(`${API_BASE}/health`, {
         headers: {
-          'Authorization': AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : '',
+          Authorization: AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : "",
         },
       });
       if (!response.ok) {
@@ -76,7 +76,9 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
       metrics.successCount++;
     } catch (error) {
       metrics.errorCount++;
-      console.log(chalk.yellow(`✗ Request failed: ${error instanceof Error ? error.message : String(error)}`));
+      console.log(
+        chalk.yellow(`✗ Request failed: ${error instanceof Error ? error.message : String(error)}`)
+      );
     }
 
     metrics.totalRequests++;
@@ -101,28 +103,31 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
 
   // Calculate metrics
   metrics.errorRate = (metrics.errorCount / metrics.totalRequests) * 100;
-  metrics.avgLatency = latencies.length > 0 ? latencies.reduce((a, b) => a + b) / latencies.length : 0;
+  metrics.avgLatency =
+    latencies.length > 0 ? latencies.reduce((a, b) => a + b) / latencies.length : 0;
   metrics.peakLatency = latencies.length > 0 ? Math.max(...latencies) : 0;
 
   // Evaluate status
   if (metrics.errorRate > 1.0) {
-    metrics.status = 'FAIL';
+    metrics.status = "FAIL";
     console.log(chalk.red(`✗ Error rate exceeded: ${metrics.errorRate.toFixed(2)}% (limit: 1%)`));
   }
   if (metrics.peakLatency > 5000) {
-    metrics.status = 'FAIL';
-    console.log(chalk.red(`✗ Peak latency too high: ${metrics.peakLatency.toFixed(0)}ms (limit: 5000ms)`));
+    metrics.status = "FAIL";
+    console.log(
+      chalk.red(`✗ Peak latency too high: ${metrics.peakLatency.toFixed(0)}ms (limit: 5000ms)`)
+    );
   }
 
   // Print results
-  console.log(chalk.dim('\n📊 Soak Test Results:'));
+  console.log(chalk.dim("\n📊 Soak Test Results:"));
   console.log(`  Total Requests: ${metrics.totalRequests}`);
   console.log(`  Successful: ${metrics.successCount}`);
   console.log(`  Failed: ${metrics.errorCount}`);
   console.log(`  Error Rate: ${metrics.errorRate.toFixed(2)}%`);
   console.log(`  Avg Latency: ${metrics.avgLatency.toFixed(2)}ms`);
   console.log(`  Peak Latency: ${metrics.peakLatency.toFixed(0)}ms`);
-  console.log(`  Status: ${metrics.status === 'PASS' ? chalk.green('PASS') : chalk.red('FAIL')}`);
+  console.log(`  Status: ${metrics.status === "PASS" ? chalk.green("PASS") : chalk.red("FAIL")}`);
 
   return metrics;
 }
@@ -132,7 +137,7 @@ async function runSoakTest(config: SoakTestConfig): Promise<SoakMetrics> {
  */
 async function morningLoadSoak(): Promise<SoakMetrics> {
   return runSoakTest({
-    title: 'Morning Load Soak (4 hours)',
+    title: "Morning Load Soak (4 hours)",
     duration: 4 * 3600, // 4 hours
     requestsPerSecond: 100,
   });
@@ -143,52 +148,52 @@ async function morningLoadSoak(): Promise<SoakMetrics> {
  */
 async function extendedLoadSoak(): Promise<SoakMetrics> {
   return runSoakTest({
-    title: 'Extended Soak Test (24 hours)',
+    title: "Extended Soak Test (24 hours)",
     duration: 24 * 3600, // 24 hours
     requestsPerSecond: 50,
   });
 }
 
 async function runSoakSuite(): Promise<void> {
-  console.log(chalk.cyan.bold('🧪 FlowDB Soak Test Suite\n'));
+  console.log(chalk.cyan.bold("🧪 FlowDB Soak Test Suite\n"));
   console.log(`API URL: ${API_BASE}`);
   console.log(`Start Time: ${new Date().toISOString()}\n`);
 
   // Select test duration based on CLI argument
-  const duration = process.argv[2] || 'quick';
+  const duration = process.argv[2] || "quick";
 
   let metrics: SoakMetrics;
 
   switch (duration) {
-    case 'extended':
+    case "extended":
       metrics = await extendedLoadSoak();
       break;
-    case 'morning':
+    case "morning":
       metrics = await morningLoadSoak();
       break;
     default:
       // Quick 1-minute soak for testing
       metrics = await runSoakTest({
-        title: 'Quick Soak Test (1 minute)',
+        title: "Quick Soak Test (1 minute)",
         duration: 60,
         requestsPerSecond: 100,
       });
   }
 
   // Summary
-  console.log(chalk.cyan.bold('\n\n📋 Soak Test Summary\n'));
+  console.log(chalk.cyan.bold("\n\n📋 Soak Test Summary\n"));
   console.log(`Test Duration: ${metrics.title}`);
   console.log(`Total Requests: ${metrics.totalRequests}`);
   console.log(`Success Rate: ${(100 - metrics.errorRate).toFixed(2)}%`);
   console.log(`Peak Latency: ${metrics.peakLatency.toFixed(0)}ms`);
-  console.log(`Status: ${metrics.status === 'PASS' ? chalk.green('PASS') : chalk.red('FAIL')}`);
+  console.log(`Status: ${metrics.status === "PASS" ? chalk.green("PASS") : chalk.red("FAIL")}`);
 
-  console.log(chalk.blue.bold('\n✅ Soak test complete!\n'));
-  process.exit(metrics.status === 'PASS' ? 0 : 1);
+  console.log(chalk.blue.bold("\n✅ Soak test complete!\n"));
+  process.exit(metrics.status === "PASS" ? 0 : 1);
 }
 
 // Run tests
 runSoakSuite().catch((err) => {
-  console.error(chalk.red('Fatal error:'), err);
+  console.error(chalk.red("Fatal error:"), err);
   process.exit(1);
 });

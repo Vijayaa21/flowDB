@@ -21,12 +21,15 @@ class InMemoryBranchRepository implements BranchStateRepository {
     this.store.clear();
   }
 
-  public async upsert(ownerGithubId: string, record: {
-    prNumber: number;
-    branchName: string;
-    branchDatabaseUrl: string;
-    status: BranchStatus;
-  }): Promise<void> {
+  public async upsert(
+    ownerGithubId: string,
+    record: {
+      prNumber: number;
+      branchName: string;
+      branchDatabaseUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<void> {
     const now = new Date();
     const key = branchKey(ownerGithubId, record.branchName);
     const existing = this.store.get(key);
@@ -36,15 +39,21 @@ class InMemoryBranchRepository implements BranchStateRepository {
       branchDatabaseUrl: record.branchDatabaseUrl,
       status: record.status,
       createdAt: existing?.createdAt ?? now,
-      updatedAt: now
+      updatedAt: now,
     });
   }
 
-  public async getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null> {
+  public async getByBranchName(
+    ownerGithubId: string,
+    branchName: string
+  ): Promise<BranchRecord | null> {
     return this.store.get(branchKey(ownerGithubId, branchName)) ?? null;
   }
 
-  public async getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null> {
+  public async getByPrNumber(
+    ownerGithubId: string,
+    prNumber: number
+  ): Promise<BranchRecord | null> {
     for (const [key, record] of this.store.entries()) {
       if (key.startsWith(`${ownerGithubId}:`) && record.prNumber === prNumber) {
         return record;
@@ -53,7 +62,11 @@ class InMemoryBranchRepository implements BranchStateRepository {
     return null;
   }
 
-  public async setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void> {
+  public async setStatus(
+    ownerGithubId: string,
+    branchName: string,
+    status: BranchStatus
+  ): Promise<void> {
     const key = branchKey(ownerGithubId, branchName);
     const record = this.store.get(key);
     if (!record) {
@@ -107,7 +120,7 @@ function createNodeServerFromHono(app: ReturnType<typeof createApp>) {
       const webRequest = new Request(requestUrl, {
         method: req.method,
         headers: req.headers as HeadersInit,
-        body
+        body,
       });
       const response = await app.fetch(webRequest);
       res.statusCode = response.status;
@@ -142,7 +155,7 @@ describe("orchestrator routes", () => {
           branchDatabaseUrl: `postgres://branch/${branchName}`,
           branchName,
           forkedAt: new Date(),
-          durationMs: 10
+          durationMs: 10,
         };
       },
       async teardown(branchDatabaseUrl) {
@@ -153,7 +166,7 @@ describe("orchestrator routes", () => {
       },
       async healthCheck() {
         return true;
-      }
+      },
     },
     migrationRunner: async (_projectRoot, branchDatabaseUrl) => {
       migrationRuns.push(branchDatabaseUrl);
@@ -161,17 +174,17 @@ describe("orchestrator routes", () => {
         applied: [],
         pending: [],
         schemaDiffSummary: "No migrations were applied.",
-        conflicts: []
+        conflicts: [],
       };
     },
     vercel: {
       async injectDeploymentDatabaseUrl(deploymentId, databaseUrl) {
         vercelInjects.push({ deploymentId, databaseUrl });
-      }
+      },
     },
     scheduleTask: (task) => {
       tasks.push(task());
-    }
+    },
   });
 
   const server = createNodeServerFromHono(app);
@@ -193,9 +206,7 @@ describe("orchestrator routes", () => {
   });
 
   test("GET /health echoes incoming request id", async () => {
-    const response = await request(server)
-      .get("/health")
-      .set("x-request-id", "req-health-echo-1");
+    const response = await request(server).get("/health").set("x-request-id", "req-health-echo-1");
 
     expect(response.status).toBe(200);
     expect(response.headers["x-request-id"]).toBe("req-health-echo-1");
@@ -206,9 +217,7 @@ describe("orchestrator routes", () => {
     await request(server).get("/health");
     await request(server).get("/health");
 
-    const response = await request(server)
-      .get("/metrics")
-      .set("x-request-id", "req-metrics-1");
+    const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-1");
 
     expect(response.status).toBe(200);
     expect(response.body.totalRequests).toBeGreaterThanOrEqual(3);
@@ -226,12 +235,12 @@ describe("orchestrator routes", () => {
   test("GET /metrics captures webhook and background task counters", async () => {
     const pullRequestPayload = {
       action: "opened",
-      pull_request: { number: 777, head: { ref: "feature/metrics" } }
+      pull_request: { number: 777, head: { ref: "feature/metrics" } },
     };
 
     const invalidPayload = {
       action: "opened",
-      pull_request: { number: 778, head: { ref: "feature/invalid" } }
+      pull_request: { number: 778, head: { ref: "feature/invalid" } },
     };
 
     const vercelPayload = {
@@ -241,10 +250,10 @@ describe("orchestrator routes", () => {
           id: "dep_metrics_1",
           target: "preview",
           meta: {
-            githubCommitRef: "feature/metrics"
-          }
-        }
-      }
+            githubCommitRef: "feature/metrics",
+          },
+        },
+      },
     };
 
     await request(server)
@@ -289,17 +298,19 @@ describe("orchestrator routes", () => {
     expect(response.body.backgroundTasks.scheduled).toBeGreaterThanOrEqual(2);
     expect(response.body.backgroundTasks.succeeded).toBeGreaterThanOrEqual(2);
     expect(response.body.backgroundTasks.failed).toBe(0);
-    expect(response.body.backgroundTasks.byName["github.pull_request.open_or_reopen"]).toBeGreaterThanOrEqual(
-      1
-    );
-    expect(response.body.backgroundTasks.byName["vercel.deployment.ready.preview"]).toBeGreaterThanOrEqual(1);
+    expect(
+      response.body.backgroundTasks.byName["github.pull_request.open_or_reopen"]
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      response.body.backgroundTasks.byName["vercel.deployment.ready.preview"]
+    ).toBeGreaterThanOrEqual(1);
     expect(response.body.requestId).toBe("req-metrics-2");
   });
 
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {
     const payload = {
       action: "opened",
-      pull_request: { number: 101, head: { ref: "feature/api" } }
+      pull_request: { number: 101, head: { ref: "feature/api" } },
     };
 
     const startedAt = Date.now();
@@ -325,12 +336,12 @@ describe("orchestrator routes", () => {
       prNumber: 150,
       branchName: "feature/reopen",
       branchDatabaseUrl: "postgres://branch/old-feature/reopen",
-      status: "closed"
+      status: "closed",
     });
 
     const payload = {
       action: "reopened",
-      pull_request: { number: 150, head: { ref: "feature/reopen" } }
+      pull_request: { number: 150, head: { ref: "feature/reopen" } },
     };
 
     const response = await request(server)
@@ -354,12 +365,12 @@ describe("orchestrator routes", () => {
       prNumber: 160,
       branchName: "feature/dupe",
       branchDatabaseUrl: "postgres://branch/feature/dupe",
-      status: "active"
+      status: "active",
     });
 
     const payload = {
       action: "opened",
-      pull_request: { number: 160, head: { ref: "feature/dupe" } }
+      pull_request: { number: 160, head: { ref: "feature/dupe" } },
     };
 
     const response = await request(server)
@@ -380,7 +391,7 @@ describe("orchestrator routes", () => {
       prNumber: 200,
       branchName: "feature/push",
       branchDatabaseUrl: "postgres://branch/feature/push",
-      status: "active"
+      status: "active",
     });
 
     const payload = { ref: "refs/heads/feature/push" };
@@ -401,12 +412,12 @@ describe("orchestrator routes", () => {
       prNumber: 300,
       branchName: "feature/close",
       branchDatabaseUrl: "postgres://branch/feature/close",
-      status: "active"
+      status: "active",
     });
 
     const payload = {
       action: "closed",
-      pull_request: { number: 300, head: { ref: "feature/close" } }
+      pull_request: { number: 300, head: { ref: "feature/close" } },
     };
 
     const response = await request(server)
@@ -426,7 +437,7 @@ describe("orchestrator routes", () => {
       prNumber: 400,
       branchName: "feature/preview",
       branchDatabaseUrl: "postgres://branch/feature/preview",
-      status: "active"
+      status: "active",
     });
 
     const payload = {
@@ -436,10 +447,10 @@ describe("orchestrator routes", () => {
           id: "dep_123",
           target: "preview",
           meta: {
-            githubCommitRef: "feature/preview"
-          }
-        }
-      }
+            githubCommitRef: "feature/preview",
+          },
+        },
+      },
     };
 
     const response = await request(server)
@@ -450,7 +461,7 @@ describe("orchestrator routes", () => {
     expect(response.status).toBe(200);
     expect(vercelInjects).toContainEqual({
       deploymentId: "dep_123",
-      databaseUrl: "postgres://branch/feature/preview"
+      databaseUrl: "postgres://branch/feature/preview",
     });
   });
 
@@ -459,9 +470,7 @@ describe("orchestrator routes", () => {
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.body).toEqual({ error: "Unauthorized" });
 
-    const authorized = await request(server)
-      .get("/branches")
-      .set("authorization", authHeader);
+    const authorized = await request(server).get("/branches").set("authorization", authHeader);
     expect(authorized.status).toBe(200);
     expect(authorized.body).toEqual([]);
   });
@@ -471,7 +480,7 @@ describe("orchestrator routes", () => {
       prNumber: 500,
       branchName: "feature/delete",
       branchDatabaseUrl: "postgres://branch/feature/delete",
-      status: "active"
+      status: "active",
     });
 
     const response = await request(server)
@@ -488,7 +497,7 @@ describe("orchestrator routes", () => {
   test("POST /webhooks/github rejects invalid signature", async () => {
     const payload = {
       action: "opened",
-      pull_request: { number: 999, head: { ref: "feature/bad-signature" } }
+      pull_request: { number: 999, head: { ref: "feature/bad-signature" } },
     };
 
     const response = await request(server)
@@ -501,32 +510,32 @@ describe("orchestrator routes", () => {
 
     expect(response.status).toBe(401);
   });
-    
-    test("POST /webhooks/github ignores replayed delivery ids", async () => {
-      const payload = {
-        action: "opened",
-        pull_request: { number: 610, head: { ref: "feature/replay" } }
-      };
-    
-      const first = await request(server)
-        .post("/webhooks/github")
-        .set("authorization", authHeader)
-        .set("x-github-event", "pull_request")
-        .set("x-github-delivery", "del-replay-610")
-        .set("x-hub-signature-256", signature("test-secret", payload))
-        .send(payload);
-    
-      const second = await request(server)
-        .post("/webhooks/github")
-        .set("authorization", authHeader)
-        .set("x-github-event", "pull_request")
-        .set("x-github-delivery", "del-replay-610")
-        .set("x-hub-signature-256", signature("test-secret", payload))
-        .send(payload);
-    
-      expect(first.status).toBe(200);
-      expect(second.status).toBe(200);
-      expect(second.body).toEqual({ accepted: true, ignored: true, reason: "duplicate_delivery" });
-      expect(forkCalls.filter((name) => name === "feature/replay")).toHaveLength(1);
-    });
+
+  test("POST /webhooks/github ignores replayed delivery ids", async () => {
+    const payload = {
+      action: "opened",
+      pull_request: { number: 610, head: { ref: "feature/replay" } },
+    };
+
+    const first = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-replay-610")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    const second = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-replay-610")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ accepted: true, ignored: true, reason: "duplicate_delivery" });
+    expect(forkCalls.filter((name) => name === "feature/replay")).toHaveLength(1);
+  });
 });

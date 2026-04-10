@@ -100,11 +100,7 @@
       ],
       "deployment_branches": ["main"],
       "auto_merge_enabled": false,
-      "sensitive_secrets": [
-        "SOURCE_DATABASE_URL",
-        "AUTH_SECRET",
-        "GITHUB_WEBHOOK_SECRET"
-      ]
+      "sensitive_secrets": ["SOURCE_DATABASE_URL", "AUTH_SECRET", "GITHUB_WEBHOOK_SECRET"]
     }
   },
   "deployment_checklist": {

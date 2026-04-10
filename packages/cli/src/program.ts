@@ -56,13 +56,13 @@ function defaultDeps(): CliDeps {
     ui: {
       log: console.log,
       error: console.error,
-      spinner: (text) => ora(text)
+      spinner: (text) => ora(text),
     },
     exit: (code) => {
       process.exitCode = code;
     },
     forkEngine: new ForkEngine(),
-    credentialManager: new CredentialManager()
+    credentialManager: new CredentialManager(),
   };
 }
 
@@ -135,10 +135,13 @@ function renderTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((header, idx) =>
     Math.max(header.length, ...rows.map((row) => (row[idx] ?? "").length))
   );
-  const renderRow = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i] ?? 0, " ")).join("  ");
-  return [renderRow(headers), renderRow(widths.map((w) => "-".repeat(w))), ...rows.map(renderRow)].join(
-    "\n"
-  );
+  const renderRow = (cells: string[]) =>
+    cells.map((c, i) => c.padEnd(widths[i] ?? 0, " ")).join("  ");
+  return [
+    renderRow(headers),
+    renderRow(widths.map((w) => "-".repeat(w))),
+    ...rows.map(renderRow),
+  ].join("\n");
 }
 
 async function detectOrm(projectRoot: string): Promise<OrmType> {
@@ -151,7 +154,7 @@ async function detectOrm(projectRoot: string): Promise<OrmType> {
     ["prisma", 0],
     ["drizzle", 0],
     ["raw", 0],
-    ["unknown", 0]
+    ["unknown", 0],
   ]);
   for (const migration of migrations) {
     score.set(migration.orm, (score.get(migration.orm) ?? 0) + 1);
@@ -177,7 +180,7 @@ async function readConfig(projectRoot: string, env: NodeJS.ProcessEnv): Promise<
     }
     return {
       orm: "unknown",
-      sourceDatabaseUrl: env.DATABASE_URL
+      sourceDatabaseUrl: env.DATABASE_URL,
     };
   }
 }
@@ -274,7 +277,7 @@ function loadOrchestratorConfig(
         apiKey: credentials.apiKey,
         jwtToken: credentials.jwtToken,
         orgSlug: credentials.orgSlug,
-        projectSlug: credentials.projectSlug
+        projectSlug: credentials.projectSlug,
       };
     }
   }
@@ -286,36 +289,40 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
   const deps = { ...defaultDeps(), ...inputDeps };
 
   const program = new Command();
+  program.name("flowdb").description("FlowDB CLI").showHelpAfterError();
+
   program
-    .name("flowdb")
-    .description("FlowDB CLI")
-    .showHelpAfterError();
+    .command("init")
+    .description("Detect ORM and initialize FlowDB config")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const cwd = deps.cwd();
+          const databaseUrl = deps.env.DATABASE_URL;
+          if (!databaseUrl) {
+            throw new Error("DATABASE_URL is required to initialize FlowDB.");
+          }
 
-  program.command("init").description("Detect ORM and initialize FlowDB config").action(async () => {
-    await commandWrapper(
-      deps.ui,
-      async () => {
-        const cwd = deps.cwd();
-        const databaseUrl = deps.env.DATABASE_URL;
-        if (!databaseUrl) {
-          throw new Error("DATABASE_URL is required to initialize FlowDB.");
-        }
+          const spinner = deps.ui.spinner("Detecting ORM and writing FlowDB config...").start();
+          const orm = await detectOrm(cwd);
+          const config: FlowdbConfig = {
+            orm,
+            sourceDatabaseUrl: databaseUrl,
+          };
 
-        const spinner = deps.ui.spinner("Detecting ORM and writing FlowDB config...").start();
-        const orm = await detectOrm(cwd);
-        const config: FlowdbConfig = {
-          orm,
-          sourceDatabaseUrl: databaseUrl
-        };
-
-        await writeFile(path.join(cwd, CONFIG_FILE), `${JSON.stringify(config, null, 2)}\n`, "utf8");
-        await writeEnvLocal(cwd, databaseUrl);
-        spinner.succeed("FlowDB initialized.");
-        deps.ui.log(chalk.green(`Detected ORM: ${orm}`));
-      },
-      deps.exit
-    );
-  });
+          await writeFile(
+            path.join(cwd, CONFIG_FILE),
+            `${JSON.stringify(config, null, 2)}\n`,
+            "utf8"
+          );
+          await writeEnvLocal(cwd, databaseUrl);
+          spinner.succeed("FlowDB initialized.");
+          deps.ui.log(chalk.green(`Detected ORM: ${orm}`));
+        },
+        deps.exit
+      );
+    });
 
   program
     .command("login")
@@ -338,7 +345,9 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
           const apiKey = options.apiKey || deps.env.FLOWDB_API_KEY;
 
           if (!apiUrl) {
-            throw new Error("Orchestrator API URL is required. Use -u/--url or set FLOWDB_ORCHESTRATOR_URL");
+            throw new Error(
+              "Orchestrator API URL is required. Use -u/--url or set FLOWDB_ORCHESTRATOR_URL"
+            );
           }
 
           if (!orgSlug) {
@@ -360,7 +369,7 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
               apiUrl,
               apiKey,
               orgSlug,
-              projectSlug
+              projectSlug,
             });
 
             const health = await client.health();
@@ -370,7 +379,7 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
               apiUrl,
               apiKey,
               orgSlug,
-              projectSlug
+              projectSlug,
             });
 
             deps.ui.log(chalk.green("Credentials saved to ~/.flowdb/credentials.json"));
@@ -383,99 +392,110 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
       );
     });
 
-  program.command("health").description("Check orchestrator health").action(async () => {
-    await commandWrapper(
-      deps.ui,
-      async () => {
-        const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
-        if (!orchConfig) {
-          throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
-        }
+  program
+    .command("health")
+    .description("Check orchestrator health")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+          if (!orchConfig) {
+            throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
+          }
 
-        const client = new OrchestratorClient(orchConfig);
-        const spinner = deps.ui.spinner("Checking orchestrator health...").start();
+          const client = new OrchestratorClient(orchConfig);
+          const spinner = deps.ui.spinner("Checking orchestrator health...").start();
 
-        try {
-          const health = await client.health();
-          spinner.succeed("Orchestrator health check passed");
-          deps.ui.log(chalk.green(`Status: ${health.status}`));
-          deps.ui.log(chalk.green(`Version: ${health.version}`));
-          deps.ui.log(chalk.green(`Timestamp: ${health.timestamp}`));
-        } catch (error) {
-          spinner.fail();
-          throw error;
-        }
-      },
-      deps.exit
-    );
-  });
+          try {
+            const health = await client.health();
+            spinner.succeed("Orchestrator health check passed");
+            deps.ui.log(chalk.green(`Status: ${health.status}`));
+            deps.ui.log(chalk.green(`Version: ${health.version}`));
+            deps.ui.log(chalk.green(`Timestamp: ${health.timestamp}`));
+          } catch (error) {
+            spinner.fail();
+            throw error;
+          }
+        },
+        deps.exit
+      );
+    });
 
   const branch = program.command("branch").description("Manage branch databases");
 
-  branch.command("list").description("List active branch databases").action(async () => {
-    await commandWrapper(
-      deps.ui,
-      async () => {
-        const cwd = deps.cwd();
-        const config = await readConfig(cwd, deps.env);
-        const spinner = deps.ui.spinner("Loading branch databases...").start();
+  branch
+    .command("list")
+    .description("List active branch databases")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const cwd = deps.cwd();
+          const config = await readConfig(cwd, deps.env);
+          const spinner = deps.ui.spinner("Loading branch databases...").start();
 
-        // Try to use orchestrator if available
-        const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
-        let rows: string[][] = [];
+          // Try to use orchestrator if available
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+          let rows: string[][] = [];
 
-        if (orchConfig) {
-          try {
-            const client = new OrchestratorClient(orchConfig);
-            const response = await client.listBranches(25);
-            spinner.stop();
+          if (orchConfig) {
+            try {
+              const client = new OrchestratorClient(orchConfig);
+              const response = await client.listBranches(25);
+              spinner.stop();
 
-            for (const branch of response.items || []) {
-              rows.push([
-                branch.name,
-                chalk.green("active"),
-                branch.createdAt ? chalk.cyan(new Date(branch.createdAt).toLocaleDateString()) : "unknown"
-              ]);
+              for (const branch of response.items || []) {
+                rows.push([
+                  branch.name,
+                  chalk.green("active"),
+                  branch.createdAt
+                    ? chalk.cyan(new Date(branch.createdAt).toLocaleDateString())
+                    : "unknown",
+                ]);
+              }
+
+              if (rows.length === 0) {
+                deps.ui.log(chalk.yellow("No branches found"));
+              } else {
+                deps.ui.log(renderTable(["name", "status", "created"], rows));
+              }
+
+              return;
+            } catch {
+              // Fall through to local fork engine if orchestrator fails
+              spinner.text = "Falling back to local branch detection...";
             }
-
-            if (rows.length === 0) {
-              deps.ui.log(chalk.yellow("No branches found"));
-            } else {
-              deps.ui.log(renderTable(["name", "status", "created"], rows));
-            }
-
-            return;
-          } catch {
-            // Fall through to local fork engine if orchestrator fails
-            spinner.text = "Falling back to local branch detection...";
           }
-        }
 
-        // Fallback to local fork engine
-        const branches = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
+          // Fallback to local fork engine
+          const branches = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
 
-        for (const branch of branches) {
-          const name = branch.name;
-          const url = withDatabaseName(config.sourceDatabaseUrl, name);
-          const healthy = await deps.forkEngine.healthCheck(url);
-          rows.push([
-            name,
-            healthy ? chalk.green("active") : chalk.red("unreachable"),
-            chalk.cyan(formatAge(branch.name))
-          ]);
-        }
+          for (const branch of branches) {
+            const name = branch.name;
+            const url = withDatabaseName(config.sourceDatabaseUrl, name);
+            const healthy = await deps.forkEngine.healthCheck(url);
+            rows.push([
+              name,
+              healthy ? chalk.green("active") : chalk.red("unreachable"),
+              chalk.cyan(formatAge(branch.name)),
+            ]);
+          }
 
-        spinner.stop();
-        deps.ui.log(renderTable(["name", "status", "age"], rows));
-      },
-      deps.exit
-    );
-  });
+          spinner.stop();
+          deps.ui.log(renderTable(["name", "status", "age"], rows));
+        },
+        deps.exit
+      );
+    });
 
   branch
     .command("create")
     .argument("<name>", "Branch name")
-    .option("--source-url <url>", "Source database URL (optional, uses main database if not provided)")
+    .option(
+      "--source-url <url>",
+      "Source database URL (optional, uses main database if not provided)"
+    )
     .description("Create a new branch database")
     .action(async (name: string, options: { sourceUrl?: string }) => {
       await commandWrapper(
@@ -557,7 +577,11 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
           const cwd = deps.cwd();
           const config = await readConfig(cwd, deps.env);
           const spinner = deps.ui.spinner(`Resetting branch '${name}'...`).start();
-          const branchDbName = await resolveBranchDbName(deps.forkEngine, config.sourceDatabaseUrl, name);
+          const branchDbName = await resolveBranchDbName(
+            deps.forkEngine,
+            config.sourceDatabaseUrl,
+            name
+          );
           const branchDbUrl = withDatabaseName(config.sourceDatabaseUrl, branchDbName);
           const branchRef = inferBranchRefFromDbName(config.sourceDatabaseUrl, branchDbName);
           await deps.forkEngine.teardown(branchDbUrl);
@@ -581,7 +605,11 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
           const spinner = deps.ui.spinner(`Computing schema diff for '${branchName}'...`).start();
           const { parseMigrations, reconcile } = await loadReconciler();
 
-          const branchDbName = await resolveBranchDbName(deps.forkEngine, config.sourceDatabaseUrl, branchName);
+          const branchDbName = await resolveBranchDbName(
+            deps.forkEngine,
+            config.sourceDatabaseUrl,
+            branchName
+          );
           const branchDbUrl = withDatabaseName(config.sourceDatabaseUrl, branchDbName);
 
           const all = await parseMigrations(cwd);
@@ -603,7 +631,7 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
             return [
               migration.filename,
               conflict ? chalk.red("conflict") : chalk.green("safe"),
-              conflict ? `${conflict.table}.${conflict.column}` : "-"
+              conflict ? `${conflict.table}.${conflict.column}` : "-",
             ];
           });
 
@@ -632,7 +660,11 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
           const seedPath = path.resolve(cwd, file);
           await access(seedPath);
 
-          const branchDbName = await resolveBranchDbName(deps.forkEngine, config.sourceDatabaseUrl, branch);
+          const branchDbName = await resolveBranchDbName(
+            deps.forkEngine,
+            config.sourceDatabaseUrl,
+            branch
+          );
           const branchDbUrl = withDatabaseName(config.sourceDatabaseUrl, branchDbName);
           const sql = await readFile(seedPath, "utf8");
 
@@ -651,33 +683,36 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
       );
     });
 
-  program.command("status").description("Show branch and migration status").action(async () => {
-    await commandWrapper(
-      deps.ui,
-      async () => {
-        const cwd = deps.cwd();
-        const config = await readConfig(cwd, deps.env);
-        const spinner = deps.ui.spinner("Collecting status...").start();
-        const { parseMigrations } = await loadReconciler();
+  program
+    .command("status")
+    .description("Show branch and migration status")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const cwd = deps.cwd();
+          const config = await readConfig(cwd, deps.env);
+          const spinner = deps.ui.spinner("Collecting status...").start();
+          const { parseMigrations } = await loadReconciler();
 
-        const branchName = currentGitBranch(cwd);
-        const dbHealthy = await deps.forkEngine.healthCheck(config.sourceDatabaseUrl);
+          const branchName = currentGitBranch(cwd);
+          const dbHealthy = await deps.forkEngine.healthCheck(config.sourceDatabaseUrl);
 
-        const migrations = await parseMigrations(cwd);
-        const appliedIds = await queryAppliedMigrationIds(config.sourceDatabaseUrl);
-        const pending = migrations.filter((migration) => !appliedIds.has(migration.id));
+          const migrations = await parseMigrations(cwd);
+          const appliedIds = await queryAppliedMigrationIds(config.sourceDatabaseUrl);
+          const pending = migrations.filter((migration) => !appliedIds.has(migration.id));
 
-        spinner.stop();
-        deps.ui.log(chalk.bold("FlowDB Status"));
-        deps.ui.log(`current branch: ${chalk.cyan(branchName)}`);
-        deps.ui.log(
-          `db connection: ${dbHealthy ? chalk.green("connected") : chalk.red("disconnected")}`
-        );
-        deps.ui.log(`pending migrations: ${chalk.yellow(String(pending.length))}`);
-      },
-      deps.exit
-    );
-  });
+          spinner.stop();
+          deps.ui.log(chalk.bold("FlowDB Status"));
+          deps.ui.log(`current branch: ${chalk.cyan(branchName)}`);
+          deps.ui.log(
+            `db connection: ${dbHealthy ? chalk.green("connected") : chalk.red("disconnected")}`
+          );
+          deps.ui.log(`pending migrations: ${chalk.yellow(String(pending.length))}`);
+        },
+        deps.exit
+      );
+    });
 
   return program;
 }

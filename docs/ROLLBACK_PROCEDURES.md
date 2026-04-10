@@ -5,6 +5,7 @@ This document defines detailed procedures for rolling back FlowDB deployments in
 ## Rollback Authority
 
 **Who can authorize rollback**:
+
 - ✓ On-call engineer (emergency rollback, <1 minute approved)
 - ✓ Engineering lead
 - ✓ DevOps lead
@@ -12,6 +13,7 @@ This document defines detailed procedures for rolling back FlowDB deployments in
 - ✓ CTO
 
 **Emergency vs Planned**:
+
 - **Emergency** (<30 min old deployment): On-call alone
 - **Planned** (>30 min): Requires engineering lead approval
 
@@ -20,43 +22,50 @@ This document defines detailed procedures for rolling back FlowDB deployments in
 ### Automatic Rollback
 
 **Trigger 1: Canary Failure**
+
 - Canary error rate exceeds 2% (vs 0.5% target)
 - Canary p99 latency exceeds 2000ms (vs 500ms target)
 - Webhook delivery drops below 95%
 - Database connectivity lost
-→ Action: Auto-revert canary, alert ops team
+  → Action: Auto-revert canary, alert ops team
 
 **Trigger 2: Production Smoke Test Failure**
+
 - Any smoke test fails post-deployment
 - Health endpoint unreachable
 - Database queries timing out
 - Authentication broken
-→ Action: Auto-rollback to previous version, page on-call
+  → Action: Auto-rollback to previous version, page on-call
 
 **Trigger 3: Critical Error Rate**
+
 - Production error rate exceeds 5% continuously for 2+ minutes
 - 500 errors appear in logs
 - Database deadlocks detected
-→ Action: Page on-call, await manual approval for rollback
+  → Action: Page on-call, await manual approval for rollback
 
 ### Manual Rollback
 
 **Trigger 1: Unexpected Behavior**
+
 - User reports broken functionality
 - Unexpected API behavior discovered
 - Feature not working as expected
 
 **Trigger 2: Performance Degradation**
+
 - API latency spike >1000ms sustained
 - Database query performance worse than baseline
 - Background jobs mysteriously slow
 
 **Trigger 3: Data Integrity Issues**
+
 - Unexpected data state detected
 - Webhook delivery anomalies
 - Authentication failures for users
 
 **Trigger 4: Business Decision**
+
 - Launch date changed, rollback prepared version
 - Feature flag not working, rollback implementation
 
@@ -67,12 +76,14 @@ This document defines detailed procedures for rolling back FlowDB deployments in
 **Authority**: On-call engineer (no approval needed for <30 min old deployment)
 
 ### Step 1: Declare Emergency (10 seconds)
+
 ```bash
 # Alert team
 slack @engineering-leads "EMERGENCY ROLLBACK INITIATED: [reason]"
 ```
 
 ### Step 2: Trigger Rollback (20 seconds)
+
 ```bash
 # Get current deployed version
 ssh prod-api-01 'cat /etc/flowdb/VERSION'
@@ -92,6 +103,7 @@ gh workflow run rollback-production.yml \
 ```
 
 ### Step 3: Verify Rollback (60 seconds)
+
 ```bash
 # Check that previous version is active
 curl -s https://api.flowdb.dev/health | jq '.version'
@@ -107,6 +119,7 @@ curl -s https://api.flowdb.dev/health | jq '.database'
 ```
 
 ### Step 4: Notify Team (30 seconds)
+
 ```bash
 # Update Slack
 slack @engineering-leads "ROLLBACK COMPLETE: v1.2.3 → v1.2.2"
@@ -119,6 +132,7 @@ echo "Impact: ~2 minutes of degraded service"
 ```
 
 ### Timeline
+
 ```
 T+00:00 Error detected
 T+00:30 Slack alert sent
@@ -137,15 +151,17 @@ T+02:00 Verification complete
 ### Step 1: Assess Situation (2 min)
 
 **Gather Information**:
+
 - What is the exact issue?
 - How many users affected?
 - Is it a data loss risk? (abort rollback if yes)
 - Has issue been isolated to this deployment?
 
 **Decision Tree**:
+
 ```
 Issue detected
-├─ Affecting users? 
+├─ Affecting users?
 │  ├─ Yes + Data at risk? → **ABORT** (get DBA)
 │  ├─ Yes + No data risk? → Emergency rollback (1 min)
 │  └─ No → Planned rollback (5 min)
@@ -170,7 +186,7 @@ slack @engineering-lead-on-call \
 
 ```
 Engineering Lead: ✅ Approved
-Reasoning: Issue confirmed in new search code, 
+Reasoning: Issue confirmed in new search code,
 user context preserved in database, safe to rollback
 ```
 
@@ -240,6 +256,7 @@ gh issue create \
 **Example**: v1.2.3 enabled webhook auto-queue feature
 
 **Process**:
+
 1. DO NOT rollback code if webhooks were processed
 2. Instead:
    - Roll back to previous code version
@@ -248,10 +265,11 @@ gh issue create \
    - Document data state
 
 **Check for Data Changes**:
+
 ```bash
 # Query recent data modifications
 psql $PROD_DATABASE_URL -c "
-  SELECT table_name, 
+  SELECT table_name,
          COUNT(*) as rows_modified,
          MAX(updated_at) as last_modified
   FROM audit_log
@@ -261,8 +279,9 @@ psql $PROD_DATABASE_URL -c "
 ```
 
 **Result**:
+
 ```
-      table_name       | rows_modified |       last_modified        
+      table_name       | rows_modified |       last_modified
 -----------------------+---------------+----------------------------
  webhook_events        |        1,245  | 2024-04-10 15:32:10+00:00
  branch_metadata       |           43  | 2024-04-10 15:31:45+00:00
@@ -270,6 +289,7 @@ psql $PROD_DATABASE_URL -c "
 ```
 
 **Action**:
+
 - If only metrics/logs modified: Safe to rollback
 - If core data modified: Consult DBA before rollback
 - If data loss possible: ABORT rollback, fix in code
@@ -277,11 +297,13 @@ psql $PROD_DATABASE_URL -c "
 ## Rollback Limitations
 
 ⚠️ **Cannot rollback**:
+
 - Database schema changes (migrations are one-way)
 - Data deletions (no way to restore)
 - Breaking API changes to external clients
 
 ⚠️ **Be careful with**:
+
 - Background jobs (may be partially complete)
 - Cache state (may be stale after rollback)
 - User sessions (may need to re-authenticate)
@@ -335,22 +357,22 @@ After rollback, verify these criteria are met:
   - API health endpoint returns 200
   - Database connectivity confirmed
   - All critical services responding
-  
+
 ✓ Error Rates
   - Error rate < 0.5% (normal baseline)
   - No 500 errors in access logs
   - No critical alerts firing
-  
+
 ✓ User Experience
   - API latency < 500ms p99
   - Webhooks delivering normally
   - No blocked user operations
-  
+
 ✓ Data Integrity
   - Database consistent state
   - No data loss detected
   - Audit logs intact
-  
+
 ✓ Communication
   - Status page updated
   - Team slack notified
@@ -364,6 +386,7 @@ After rollback, verify these criteria are met:
 **Detection**: OOM killer terminating processes every 30 min
 
 **Rollback decision**: YES
+
 - Previous version was stable for 8 hours
 - No data modified
 - Safe to rollback code
@@ -375,6 +398,7 @@ After rollback, verify these criteria are met:
 **Detection**: Webhooks piling up, not being processed
 
 **Rollback decision**: MAYBE
+
 - Check: Were webhooks processed before rollback?
 - If YES: Cannot rollback without manual reconciliation
 - If NO: Safe to rollback, reprocess webhooks after
@@ -386,13 +410,15 @@ After rollback, verify these criteria are met:
 **Detection**: Mobile app unable to authenticate
 
 **Rollback decision**: YES (if live users affected)
+
 - API change broke mobile app
-- Can't ask all users to upgrade immediately  
+- Can't ask all users to upgrade immediately
 - Rollback while new version in app stores
 
 **Timeline**: 2-5 minutes
 
-**Follow-up**: 
+**Follow-up**:
+
 - Plan graceful API deprecation
 - Provide migration path to new API
 - Coordinate with mobile team
@@ -402,11 +428,13 @@ After rollback, verify these criteria are met:
 **Detection**: Database corruption errors in logs
 
 **Rollback decision**: NO
+
 - Cannot undo schema migrations
 - Rollback code won't fix DDL changes
 - Must maintain current schema, fix application logic
 
 **Action**:
+
 - DO NOT rollback
 - Contact DBA immediately
 - Prepare to repair database or restore from backup
@@ -444,7 +472,7 @@ If rollback doesn't resolve issue:
    └─ Issue persists after rollback?
       └─ Escalate to Engineering Lead (5 min)
 
-2. Engineering Lead  
+2. Engineering Lead
    └─ Problem is pre-existing or environmental?
       └─ Escalate to VP Engineering (10 min)
 

@@ -4,7 +4,7 @@ import tsPlugin from "@typescript-eslint/eslint-plugin";
 
 export default [
   {
-    ignores: ["**/dist/**", "**/.next/**", "node_modules/**", "coverage/**"]
+    ignores: ["**/dist/**", "**/.next/**", "node_modules/**", "coverage/**"],
   },
   js.configs.recommended,
   {
@@ -12,9 +12,9 @@ export default [
     languageOptions: {
       globals: {
         console: "readonly",
-        process: "readonly"
-      }
-    }
+        process: "readonly",
+      },
+    },
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
@@ -22,16 +22,16 @@ export default [
       parser: tsParser,
       parserOptions: {
         ecmaVersion: "latest",
-        sourceType: "module"
+        sourceType: "module",
       },
       globals: {
         console: "readonly",
         process: "readonly",
-        setTimeout: "readonly"
-      }
+        setTimeout: "readonly",
+      },
     },
     plugins: {
-      "@typescript-eslint": tsPlugin
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
@@ -43,9 +43,9 @@ export default [
         "warn",
         {
           argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_"
-        }
-      ]
-    }
-  }
+          varsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ];

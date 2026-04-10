@@ -2,7 +2,8 @@
 
 import { getSession } from "next-auth/react";
 
-const DEFAULT_ORCHESTRATOR_URL = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3000";
+const DEFAULT_ORCHESTRATOR_URL =
+  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3000";
 const DEFAULT_ORG_SLUG = process.env.NEXT_PUBLIC_FLOWDB_ORG_SLUG ?? "";
 const DEFAULT_PROJECT_SLUG = process.env.NEXT_PUBLIC_FLOWDB_PROJECT_SLUG ?? "";
 const DEFAULT_ENVIRONMENT = process.env.NEXT_PUBLIC_FLOWDB_ENVIRONMENT ?? "local";
@@ -11,7 +12,7 @@ const CONFIG_KEYS = {
   orchestratorUrl: "flowdb.orchestratorUrl",
   orgSlug: "flowdb.orgSlug",
   projectSlug: "flowdb.projectSlug",
-  environment: "flowdb.environment"
+  environment: "flowdb.environment",
 } as const;
 
 export type DashboardConfig = {
@@ -58,7 +59,7 @@ export function readDashboardConfig(): DashboardConfig {
       orchestratorUrl: DEFAULT_ORCHESTRATOR_URL,
       orgSlug: DEFAULT_ORG_SLUG,
       projectSlug: DEFAULT_PROJECT_SLUG,
-      environment: DEFAULT_ENVIRONMENT
+      environment: DEFAULT_ENVIRONMENT,
     };
   }
 
@@ -67,8 +68,12 @@ export function readDashboardConfig(): DashboardConfig {
       window.localStorage.getItem(CONFIG_KEYS.orchestratorUrl) ?? DEFAULT_ORCHESTRATOR_URL
     ),
     orgSlug: (window.localStorage.getItem(CONFIG_KEYS.orgSlug) ?? DEFAULT_ORG_SLUG).trim(),
-    projectSlug: (window.localStorage.getItem(CONFIG_KEYS.projectSlug) ?? DEFAULT_PROJECT_SLUG).trim(),
-    environment: (window.localStorage.getItem(CONFIG_KEYS.environment) ?? DEFAULT_ENVIRONMENT).trim()
+    projectSlug: (
+      window.localStorage.getItem(CONFIG_KEYS.projectSlug) ?? DEFAULT_PROJECT_SLUG
+    ).trim(),
+    environment: (
+      window.localStorage.getItem(CONFIG_KEYS.environment) ?? DEFAULT_ENVIRONMENT
+    ).trim(),
   };
 }
 
@@ -77,7 +82,7 @@ export function saveDashboardConfig(config: DashboardConfig): DashboardConfig {
     orchestratorUrl: normalizeUrl(config.orchestratorUrl || DEFAULT_ORCHESTRATOR_URL),
     orgSlug: config.orgSlug.trim(),
     projectSlug: config.projectSlug.trim(),
-    environment: config.environment.trim() || DEFAULT_ENVIRONMENT
+    environment: config.environment.trim() || DEFAULT_ENVIRONMENT,
   };
 
   if (typeof window !== "undefined") {
@@ -90,7 +95,11 @@ export function saveDashboardConfig(config: DashboardConfig): DashboardConfig {
   return normalized;
 }
 
-async function apiFetch<T>(path: string, config: DashboardConfig, init: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  config: DashboardConfig,
+  init: RequestInit = {}
+): Promise<T> {
   const session = await getSession();
   const headers = new Headers(init.headers);
   headers.set("x-request-id", buildRequestId());
@@ -113,7 +122,7 @@ async function apiFetch<T>(path: string, config: DashboardConfig, init: RequestI
   const response = await fetch(`${config.orchestratorUrl}${path}`, {
     ...init,
     headers,
-    cache: "no-store"
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -137,9 +146,9 @@ export const api = {
       return response.items ?? [];
     },
     teardown: (name: string, config: DashboardConfig) =>
-      apiFetch(`/branches/${encodeURIComponent(name)}`, config, { method: "DELETE" })
+      apiFetch(`/branches/${encodeURIComponent(name)}`, config, { method: "DELETE" }),
   },
   health: {
-    check: (config: DashboardConfig) => apiFetch<HealthStatus>("/health", config)
-  }
+    check: (config: DashboardConfig) => apiFetch<HealthStatus>("/health", config),
+  },
 };

@@ -5,9 +5,9 @@ export const githubPullRequestSchema = z.object({
   pull_request: z.object({
     number: z.number().int(),
     head: z.object({
-      ref: z.string().min(1)
-    })
-  })
+      ref: z.string().min(1),
+    }),
+  }),
 });
 
 export const githubPushSchema = z.object({
@@ -16,10 +16,10 @@ export const githubPushSchema = z.object({
     .object({
       name: z.string().min(1),
       owner: z.object({
-        login: z.string().min(1)
-      })
+        login: z.string().min(1),
+      }),
     })
-    .optional()
+    .optional(),
 });
 
 export const vercelWebhookSchema = z.object({
@@ -30,14 +30,14 @@ export const vercelWebhookSchema = z.object({
         .object({
           id: z.string().min(1),
           target: z.string().optional(),
-          meta: z.record(z.string(), z.string()).optional()
+          meta: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
       git: z
         .object({
-          branch: z.string().optional()
+          branch: z.string().optional(),
         })
-        .optional()
+        .optional(),
     })
-    .optional()
+    .optional(),
 });

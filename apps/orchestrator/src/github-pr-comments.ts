@@ -34,7 +34,7 @@ export function renderReconcileCommentMarkdown(data: ReconcileCommentData): stri
           "",
           "> [!WARNING]",
           "> Conflicts were detected while reconciling this branch with main.",
-          ...data.conflicts.map((conflict) => `> - ${conflict.table}.${conflict.column}`)
+          ...data.conflicts.map((conflict) => `> - ${conflict.table}.${conflict.column}`),
         ].join("\n")
       : "";
 
@@ -53,7 +53,7 @@ export function renderReconcileCommentMarkdown(data: ReconcileCommentData): stri
     "",
     data.schemaDiffSummary,
     conflictWarningBlock,
-    ""
+    "",
   ].join("\n");
 }
 
@@ -81,7 +81,7 @@ export class OctokitGithubCommentPublisher implements GithubCommentPublisher {
       repo: params.repo,
       state: "open",
       head: `${params.owner}:${params.branchName}`,
-      per_page: 1
+      per_page: 1,
     });
 
     const pullRequest = pullRequests.data[0];
@@ -94,7 +94,7 @@ export class OctokitGithubCommentPublisher implements GithubCommentPublisher {
       owner: params.owner,
       repo: params.repo,
       issue_number: pullRequest.number,
-      per_page: 100
+      per_page: 100,
     });
 
     const existing = comments.data.find((comment) => comment.body?.includes(FLOWDB_COMMENT_MARKER));
@@ -104,7 +104,7 @@ export class OctokitGithubCommentPublisher implements GithubCommentPublisher {
         owner: params.owner,
         repo: params.repo,
         comment_id: existing.id,
-        body
+        body,
       });
       return;
     }
@@ -113,7 +113,7 @@ export class OctokitGithubCommentPublisher implements GithubCommentPublisher {
       owner: params.owner,
       repo: params.repo,
       issue_number: pullRequest.number,
-      body
+      body,
     });
   }
 }

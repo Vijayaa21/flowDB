@@ -27,6 +27,7 @@ Each stage must pass all gates before progressing to the next stage.
 **Responsibility**: Development team
 
 **Steps**:
+
 1. Create feature/fix branch from `main`
 2. Implement changes with tests
 3. Create pull request with:
@@ -52,30 +53,35 @@ Each stage must pass all gates before progressing to the next stage.
 **Gates**:
 
 #### Gate 1: Lint & Format (5 min)
+
 - ESLint checks pass
 - Prettier formatting matches
 - No console.logs in production code
 - No TODO comments without tracked issues
 
 #### Gate 2: TypeScript Type Check (3 min)
+
 - No type errors
 - Strict mode enabled
 - All function parameters typed
 - Return types inferred or explicit
 
 #### Gate 3: Unit & Integration Tests (15 min)
+
 - All test suites passing
 - Minimum 80% code coverage
 - No flaky tests
 - Database tests use isolated containers
 
 #### Gate 4: Build Verification (10 min)
+
 - Orchestrator builds successfully
-- Dashboard builds successfully  
+- Dashboard builds successfully
 - No build warnings promoted to errors
 - Assets optimized and bundled
 
 #### Gate 5: Security Checks (3 min)
+
 - Dependency vulnerability audit passes
 - No hardcoded secrets detected
 - SAST checks pass (if integrated)
@@ -84,6 +90,7 @@ Each stage must pass all gates before progressing to the next stage.
 **Pass Criteria**: All 5 gates must pass. If any gate fails, merge commits are blocked.
 
 **On Failure**:
+
 1. Developer is notified
 2. Build badge turns red in PR
 3. Merge button disabled
@@ -130,6 +137,7 @@ Each stage must pass all gates before progressing to the next stage.
    - **FAIL**: Any metric exceeds threshold → automatic rollback to stable
 
 **Monitoring Dashboard Metrics**:
+
 ```
 Canary Health Dashboard
 =====================================
@@ -149,16 +157,19 @@ Status: HEALTHY ✓
 **Responsibility**: DevOps/SRE and Engineering Lead
 
 **Prerequisites**:
+
 - Canary phase passed all health checks
 - Change management ticket approved (if required)
 - Deployment window open (business hours)
 - On-call team available
 
 **Triggering**:
+
 - Manual workflow dispatch OR
 - Automatic after canary passes (optional)
 
 **Approval Required**:
+
 - Engineering Lead: Sign-off on readiness
 - DevOps Engineer: Deployment execution
 - Optional: Change Advisory Board (for large changes)
@@ -173,24 +184,24 @@ Status: HEALTHY ✓
    - Verify on-call escalation configured
 
 2. **Blue-Green Deployment** (8 min)
-   
+
    **Strategy**: Zero-downtime deployment
-   
+
    ```
    BEFORE:
    Users → Load Balancer → BLUE (v1.2.0) [Active]
                         → GREEN (idle)
-   
+
    STEP 1: Deploy new version to GREEN
    Users → LB → BLUE (v1.2.0) [Active]
               → GREEN (v1.2.1) [Warming up]
-   
+
    STEP 2: Health check GREEN cluster
-   
+
    STEP 3: Switch load balancer to GREEN
    Users → LB → BLUE (v1.2.0) [Idle - Rollback target]
               → GREEN (v1.2.1) [Active]
-   
+
    STEP 4: Keep BLUE warm for 1 hour
    STEP 5: After 1 hour, tear down BLUE
    ```
@@ -216,6 +227,7 @@ Status: HEALTHY ✓
    - Monitor error logs for anomalies
 
 **Deployment Timeline**:
+
 ```
 T+0:00  Start pre-deployment validation
 T+0:05  Pre-checks complete, start deployment
@@ -231,6 +243,7 @@ T+0:30  Monitoring active, release complete
 **Responsibility**: On-call team
 
 **Ongoing Checks**:
+
 - Error rates remain <0.5%
 - Latency remains <500ms p99
 - Database health nominal
@@ -240,6 +253,7 @@ T+0:30  Monitoring active, release complete
 **Duration**: 24 hours post-deployment (critical watch period)
 
 **On Issues**:
+
 1. Alert triggered
 2. On-call engineer notified
 3. If critical: execute rollback (see Rollback section)
@@ -287,6 +301,7 @@ FlowDB uses **semantic versioning**: `MAJOR.MINOR.PATCH`
 - **PATCH**: Bug fixes, security patches
 
 Example releases:
+
 - `1.0.0` - Initial production release
 - `1.1.0` - Add webhook retries
 - `1.1.1` - Fix auth token expiry edge case
@@ -296,12 +311,14 @@ Example releases:
 ## Release Window
 
 **Preferred Release Windows**:
+
 - Tuesday - Thursday, 9am - 4pm (PT)
 - Avoid Friday deployments (no coverage next day)
 - Avoid 11:30am - 1:30pm (lunch coverage gap)
 - Avoid holiday weeks
 
 **Emergency Deployments**:
+
 - Available 24/7 for critical security patches
 - On-call team approval sufficient
 - Post-mortem scheduled next business day
@@ -324,16 +341,19 @@ Before triggering production deployment:
 ## Release Communication
 
 ### Before Release
+
 - Notify customers (if impactful)
 - Update status page
 - Brief support team on changes
 
 ### During Release
+
 - Live in #engineering-releases channel
 - Post status updates every 5 minutes
 - 30-second window before cutover
 
 ### After Release
+
 - Release notes published
 - Team sync on any issues
 - Customer announcement (if applicable)
@@ -344,6 +364,7 @@ Before triggering production deployment:
 **Target**: 1-2 releases per week
 
 **Metrics Tracked**:
+
 - Lead time from commit to production
 - Deployment frequency
 - Change failure rate

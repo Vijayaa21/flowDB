@@ -18,7 +18,7 @@ Production Infrastructure
                      │   Load Balancer    │
                      │   (L7 routing)     │
                      └──────────┬──────────┘
-         
+
          ┌───────────────────┬───────────────────┐
          │                   │                   │
     ┌────▼────┐         ┌────▼────┐        ┌────▼────┐
@@ -46,6 +46,7 @@ Production Infrastructure
 ### 1. Orchestrator (API)
 
 **Deployment**:
+
 - Container: Docker image (`ghcr.io/flowdb/orchestrator:latest`)
 - Runtime: Bun 1.2.5
 - Memory: 512MB min, 1GB max
@@ -53,6 +54,7 @@ Production Infrastructure
 - Instances: 3 per cluster (HA)
 
 **Environment**:
+
 ```dockerfile
 # Production secrets (injected at runtime)
 SOURCE_DATABASE_URL=postgresql://...
@@ -63,6 +65,7 @@ VERCEL_API_TOKEN=<token>
 ```
 
 **Health Check**:
+
 ```
 Endpoint: /health
 Interval: 10 seconds
@@ -72,6 +75,7 @@ Timeout: 5 seconds
 ### 2. Dashboard (Frontend)
 
 **Deployment**:
+
 - Framework: Next.js 15.2.2
 - Runtime: Node.js
 - Build: Static + Server Components
@@ -80,6 +84,7 @@ Timeout: 5 seconds
 - Instances: 2 (minimum)
 
 **Build Process**:
+
 ```bash
 # Requirements for production build
 NEXT_PUBLIC_API_URL=https://api.flowdb.dev
@@ -92,6 +97,7 @@ AUTH_SECRET=<injected>
 ### 3. PostgreSQL Database
 
 **Configuration**:
+
 - Version: 16+
 - Instance Class: db.r6i.xlarge (16GB RAM)
 - Storage: 500GB SSD, auto-scaling
@@ -99,6 +105,7 @@ AUTH_SECRET=<injected>
 - Read Replicas: 1 (for analytics/reporting)
 
 **Performance Tuning**:
+
 ```sql
 -- Connection pooling
 max_connections = 500
@@ -119,6 +126,7 @@ max_wal_senders = 10
 **Type**: Kubernetes Service (if K8s) or AWS ALB
 
 **Routing**:
+
 - HTTPS termination (TLS 1.3)
 - Path-based routing:
   - `/api/*` → Orchestrator
@@ -127,12 +135,14 @@ max_wal_senders = 10
 
 ### 5. Secret Management
 
-**Approach**: 
+**Approach**:
+
 - Kubernetes Secrets for development
 - AWS Secrets Manager for production
 - Automatic rotation every 90 days
 
 **Critical Secrets**:
+
 ```yaml
 secrets:
   - name: SOURCE_DATABASE_URL
@@ -160,11 +170,13 @@ secrets:
 **Strategy**: Two identical production environments, switch traffic between them
 
 **Benefits**:
+
 - Zero-downtime deployments
 - Easy rollback (just switch back)
 - Time for validation before cutover
 
 **Process**:
+
 ```
 1. BLUE is active, handling all traffic
 2. Deploy new version to GREEN
@@ -183,11 +195,13 @@ secrets:
 **Strategy**: Route small % of traffic to new version, gradually increase
 
 **Benefits**:
+
 - Detect issues with real traffic
 - Limited blast radius if problems
 - Natural performance testing
 
 **Traffic Schedule**:
+
 ```
 T+00min: 5% canary traffic
 T+05min: 10% canary traffic
@@ -197,6 +211,7 @@ T+20min: 100% canary traffic
 ```
 
 **Automatic Rollback Triggers**:
+
 - Error rate > 2% (vs 0.5% baseline)
 - P99 latency > 1000ms (vs 500ms baseline)
 - Webhook delivery < 95%
@@ -246,11 +261,13 @@ T+20min: 100% canary traffic
 ### Horizontal Scaling (Adding Instances)
 
 **Trigger**:
+
 - CPU > 70% for 5 minutes
 - Memory > 80% for 5 minutes
 - P99 latency > 700ms
 
 **Scale Action**:
+
 - Add 1 instance per trigger
 - Max 10 instances per cluster
 - Scale down after 30 minutes of normal metrics
@@ -258,10 +275,12 @@ T+20min: 100% canary traffic
 ### Vertical Scaling (Larger Instances)
 
 **Trigger**:
+
 - Consistent need for > 8 instances
 - Single instance cannot handle peak load
 
 **Action**:
+
 - Increase instance size (double memory/CPU)
 - Requires deployment of new cluster
 - Keep previous cluster as fallback for 1 week
@@ -291,6 +310,7 @@ verify_data_integrity()
 ### Regional Failover
 
 **If primary region fails**:
+
 1. Trigger automated failover to secondary region
 2. DNS updated (< 5 min propagation)
 3. Secondary region becomes primary
@@ -348,6 +368,7 @@ Medium Priority (Slack):
 ## Cost Optimization
 
 **Target Monthly Cost Breakdown**:
+
 - Compute (orchestrator): $1,200/month (3x servers)
 - Compute (dashboard): $400/month (2x servers)
 - Database (managed PostgreSQL): $1,500/month
@@ -356,6 +377,7 @@ Medium Priority (Slack):
 - **Total**: ~$3,600/month
 
 **Cost Reduction Opportunities**:
+
 - Reserved instances (33% discount): Save $1,000/month
 - Spot instances for staging: Save $300/month
 - Log retention optimization: Save $100/month

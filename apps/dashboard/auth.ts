@@ -32,7 +32,8 @@ const fallbackAuthSecret = "dev-auth-secret-change-me";
 
 const isProduction = (process.env.NODE_ENV ?? "").trim().toLowerCase() === "production";
 const isBuildPhase =
-  process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build";
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.npm_lifecycle_event === "build";
 
 function resolveSecretOrThrow(name: string, value: string | undefined, fallback: string): string {
   if (value && !isPlaceholder(value)) {
@@ -72,7 +73,7 @@ async function signFlowDbToken(githubId: string, secret: string): Promise<string
     JSON.stringify({
       githubId,
       iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 60 * 60
+      exp: Math.floor(Date.now() / 1000) + 60 * 60,
     })
   );
   const data = `${header}.${payload}`;
@@ -82,7 +83,7 @@ async function signFlowDbToken(githubId: string, secret: string): Promise<string
     new TextEncoder().encode(secret),
     {
       name: "HMAC",
-      hash: "SHA-256"
+      hash: "SHA-256",
     },
     false,
     ["sign"]
@@ -97,16 +98,16 @@ const authConfig: NextAuthConfig = {
   secret: resolvedAuthSecret,
   trustHost: true,
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
   },
   providers: [
     GitHub({
       clientId: resolvedClientId,
-      clientSecret: resolvedClientSecret
-    })
+      clientSecret: resolvedClientSecret,
+    }),
   ],
   pages: {
-    signIn: "/login"
+    signIn: "/login",
   },
   callbacks: {
     async jwt({ token, account }) {
@@ -120,13 +121,12 @@ const authConfig: NextAuthConfig = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.githubId =
-          typeof token.githubId === "string" ? token.githubId : undefined;
+        session.user.githubId = typeof token.githubId === "string" ? token.githubId : undefined;
       }
       session.token = typeof token.flowdbToken === "string" ? token.flowdbToken : undefined;
       return session;
-    }
-  }
+    },
+  },
 };
 
 const nextAuthResult: NextAuthResult = NextAuth(authConfig);

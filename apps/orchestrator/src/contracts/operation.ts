@@ -7,7 +7,7 @@ export const forkOperationStatusSchema = z.enum([
   "running",
   "succeeded",
   "failed",
-  "timed_out"
+  "timed_out",
 ]);
 
 export const forkOperationDtoSchema = z.object({
@@ -20,7 +20,7 @@ export const forkOperationDtoSchema = z.object({
   startedAt: isoDateTimeSchema,
   completedAt: isoDateTimeSchema.nullable(),
   durationMs: z.number().int().nonnegative().nullable(),
-  error: apiErrorSchema.nullable()
+  error: apiErrorSchema.nullable(),
 });
 
 export type ForkOperationStatus = z.infer<typeof forkOperationStatusSchema>;
