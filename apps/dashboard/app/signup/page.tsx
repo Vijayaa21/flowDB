@@ -3,13 +3,12 @@
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 
-export default function LoginPage() {
-  const handleGithubLogin = async () => {
+export default function SignupPage() {
+  const handleGithubSignup = async () => {
     try {
       await signIn("github", { callbackUrl: "/" });
     } catch {
-      toast.error("GitHub login failed. Check apps/dashboard/.env.local OAuth settings.");
-      return;
+      toast.error("GitHub signup failed. Check apps/dashboard/.env.local OAuth settings.");
     }
   };
 
@@ -20,23 +19,20 @@ export default function LoginPage() {
           F
         </div>
         <h1 className="mt-5 text-center text-2xl font-semibold text-slate-900 dark:text-slate-100">
-          Welcome to FlowDB
+          Create your FlowDB account
         </h1>
         <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
-          Sign in with GitHub to create your account and continue.
+          FlowDB uses GitHub OAuth for signup and login.
         </p>
         <button
           type="button"
-          onClick={() => void handleGithubLogin()}
+          onClick={() => void handleGithubSignup()}
           className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
         >
-          Continue with GitHub
+          Sign up with GitHub
         </button>
         <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">
-          No password signup is required. Configure GitHub OAuth in apps/dashboard/.env.local.
-        </p>
-        <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
-          New here? Visit /signup for the same GitHub onboarding flow.
+          Configure apps/dashboard/.env.local before testing with your GitHub account.
         </p>
       </section>
     </main>

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ForkEngine } from "../src";
 
 const TEST_DB_PREFIX = "flowdb_test";
+const NON_BRANCH_DB_PREFIX = "external_test";
 
 let container: StartedPostgreSqlContainer | undefined;
 let maintenanceUrl: string;
@@ -113,6 +114,8 @@ describe("PostgreSQLForkEngine", () => {
     const branchUrl = withDatabaseName(maintenanceUrl, dbName);
 
     const connectionClient = new Client({ connectionString: branchUrl });
+    // teardown intentionally terminates this backend; consume the expected socket error.
+    connectionClient.on("error", () => undefined);
     await connectionClient.connect();
     await connectionClient.query("SELECT 1");
 
@@ -134,7 +137,7 @@ describe("PostgreSQLForkEngine", () => {
 
     const branchAResult = await engine.fork(sourceUrl, "alpha");
     const branchBResult = await engine.fork(sourceUrl, "beta");
-    const externalDb = `${TEST_DB_PREFIX}_external_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
+    const externalDb = `${NON_BRANCH_DB_PREFIX}_${randomUUID().replace(/-/g, "")}`.slice(0, 63);
     await createDatabase(externalDb);
 
     const branches = await engine.listBranches(maintenanceUrl);
