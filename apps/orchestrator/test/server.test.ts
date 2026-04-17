@@ -8,7 +8,8 @@ import { createApp } from "../src/server";
 import type { BranchStateRepository } from "../src/branch-state-repository";
 import type { BranchRecord, BranchStatus } from "../src/types";
 
-type BranchStore = Map<string, BranchRecord>;
+type ExtendedBranchRecord = BranchRecord & { prNumber?: number | null };
+type BranchStore = Map<string, ExtendedBranchRecord>;
 
 function branchKey(ownerGithubId: string, branchName: string): string {
   return `${ownerGithubId}:${branchName}`;
@@ -17,6 +18,32 @@ function branchKey(ownerGithubId: string, branchName: string): string {
 class InMemoryBranchRepository implements BranchStateRepository {
   private readonly store: BranchStore = new Map();
 
+  public async create(
+    ownerGithubId: string,
+    record: {
+      branchName: string;
+      sourceUrl: string;
+      branchUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<BranchRecord> {
+    const now = new Date();
+    const key = branchKey(ownerGithubId, record.branchName);
+    const existing = this.store.get(key);
+    const created: ExtendedBranchRecord = {
+      id: existing?.id ?? String(this.store.size + 1),
+      branchName: record.branchName,
+      sourceUrl: record.sourceUrl,
+      branchUrl: record.branchUrl,
+      status: record.status,
+      ownerGithubId,
+      createdAt: existing?.createdAt ?? now,
+      prNumber: existing?.prNumber ?? null,
+    };
+    this.store.set(key, created);
+    return created;
+  }
+
   public reset(): void {
     this.store.clear();
   }
@@ -24,23 +51,28 @@ class InMemoryBranchRepository implements BranchStateRepository {
   public async upsert(
     ownerGithubId: string,
     record: {
-      prNumber: number;
+      prNumber?: number | null;
       branchName: string;
-      branchDatabaseUrl: string;
+      sourceUrl: string;
+      branchUrl: string;
       status: BranchStatus;
     }
   ): Promise<void> {
-    const now = new Date();
+    await this.create(ownerGithubId, {
+      branchName: record.branchName,
+      sourceUrl: record.sourceUrl,
+      branchUrl: record.branchUrl,
+      status: record.status,
+    });
+
     const key = branchKey(ownerGithubId, record.branchName);
     const existing = this.store.get(key);
-    this.store.set(key, {
-      prNumber: record.prNumber,
-      branchName: record.branchName,
-      branchDatabaseUrl: record.branchDatabaseUrl,
-      status: record.status,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
+    if (existing) {
+      this.store.set(key, {
+        ...existing,
+        prNumber: record.prNumber ?? null,
+      });
+    }
   }
 
   public async getByBranchName(
@@ -72,12 +104,14 @@ class InMemoryBranchRepository implements BranchStateRepository {
     if (!record) {
       return;
     }
-    this.store.set(key, { ...record, status, updatedAt: new Date() });
+    this.store.set(key, { ...record, status });
   }
 
   public async listActive(ownerGithubId: string): Promise<BranchRecord[]> {
     return [...this.store.entries()]
-      .filter(([key, record]) => key.startsWith(`${ownerGithubId}:`) && record.status !== "closed")
+      .filter(
+        ([key, record]) => key.startsWith(`${ownerGithubId}:`) && record.status !== "TORN_DOWN"
+      )
       .map(([, record]) => record);
   }
 }
@@ -213,6 +247,21 @@ describe("orchestrator routes", () => {
     expect(response.body.requestId).toBe("req-health-echo-1");
   });
 
+  test("GET / returns service metadata", async () => {
+    const response = await request(server).get("/").set("x-request-id", "req-root-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.service).toBe("flowdb-orchestrator");
+    expect(response.body.status).toBe("ok");
+    expect(response.body.version).toBe("test-version");
+    expect(response.body.requestId).toBe("req-root-1");
+    expect(response.body.endpoints).toEqual({
+      health: "/health",
+      metrics: "/metrics",
+      branches: "/branches",
+    });
+  });
+
   test("GET /metrics returns baseline request metrics", async () => {
     await request(server).get("/health");
     await request(server).get("/health");
@@ -335,8 +384,9 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 150,
       branchName: "feature/reopen",
-      branchDatabaseUrl: "postgres://branch/old-feature/reopen",
-      status: "closed",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/old-feature/reopen",
+      status: "TORN_DOWN",
     });
 
     const payload = {
@@ -356,16 +406,17 @@ describe("orchestrator routes", () => {
     expect(forkCalls).toContain("feature/reopen");
 
     const reopened = await branchRepo.getByBranchName("12345", "feature/reopen");
-    expect(reopened?.status).toBe("active");
-    expect(reopened?.branchDatabaseUrl).toBe("postgres://branch/feature/reopen");
+    expect(reopened?.status).toBe("READY");
+    expect(reopened?.branchUrl).toBe("postgres://branch/feature/reopen");
   });
 
   test("POST /webhooks/github ignores duplicate delivery for active branch", async () => {
     await branchRepo.upsert("12345", {
       prNumber: 160,
       branchName: "feature/dupe",
-      branchDatabaseUrl: "postgres://branch/feature/dupe",
-      status: "active",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/dupe",
+      status: "READY",
     });
 
     const payload = {
@@ -390,8 +441,9 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 200,
       branchName: "feature/push",
-      branchDatabaseUrl: "postgres://branch/feature/push",
-      status: "active",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/push",
+      status: "READY",
     });
 
     const payload = { ref: "refs/heads/feature/push" };
@@ -411,8 +463,9 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 300,
       branchName: "feature/close",
-      branchDatabaseUrl: "postgres://branch/feature/close",
-      status: "active",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/close",
+      status: "READY",
     });
 
     const payload = {
@@ -436,8 +489,9 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 400,
       branchName: "feature/preview",
-      branchDatabaseUrl: "postgres://branch/feature/preview",
-      status: "active",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/preview",
+      status: "READY",
     });
 
     const payload = {
@@ -475,23 +529,68 @@ describe("orchestrator routes", () => {
     expect(authorized.body).toEqual([]);
   });
 
+  test("POST /branches/fork creates metadata record and GET /branches returns it", async () => {
+    const createResponse = await request(server)
+      .post("/branches/fork")
+      .set("authorization", authHeader)
+      .send({
+        sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
+        branchName: "feature/manual-fork",
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.branchName).toBe("feature/manual-fork");
+    expect(createResponse.body.status).toBe("READY");
+    expect(createResponse.body.ownerGithubId).toBe("12345");
+
+    const listResponse = await request(server).get("/branches").set("authorization", authHeader);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toHaveLength(1);
+    expect(listResponse.body[0].branchName).toBe("feature/manual-fork");
+  });
+
+  test("GET /branches/:branchName returns single branch with all fields", async () => {
+    await request(server)
+      .post("/branches/fork")
+      .set("authorization", authHeader)
+      .send({
+        sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
+        branchName: "feature/single-lookup",
+      });
+
+    const response = await request(server)
+      .get("/branches/feature%2Fsingle-lookup")
+      .set("authorization", authHeader);
+
+    expect(response.status).toBe(200);
+    expect(response.body.branchName).toBe("feature/single-lookup");
+    expect(response.body).toHaveProperty("id");
+    expect(response.body).toHaveProperty("sourceUrl");
+    expect(response.body).toHaveProperty("branchUrl");
+    expect(response.body).toHaveProperty("status", "READY");
+    expect(response.body).toHaveProperty("ownerGithubId", "12345");
+    expect(response.body).toHaveProperty("createdAt");
+  });
+
   test("DELETE /branches/:name tears down and closes branch", async () => {
     await branchRepo.upsert("12345", {
       prNumber: 500,
       branchName: "feature/delete",
-      branchDatabaseUrl: "postgres://branch/feature/delete",
-      status: "active",
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/delete",
+      status: "READY",
     });
 
     const response = await request(server)
       .delete("/branches/feature%2Fdelete")
       .set("authorization", authHeader);
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
     expect(teardownCalls).toContain("postgres://branch/feature/delete");
 
     const updated = await branchRepo.getByBranchName("12345", "feature/delete");
-    expect(updated?.status).toBe("closed");
+    expect(updated?.status).toBe("TORN_DOWN");
   });
 
   test("POST /webhooks/github rejects invalid signature", async () => {

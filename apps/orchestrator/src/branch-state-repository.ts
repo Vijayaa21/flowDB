@@ -3,21 +3,33 @@ import { Pool } from "pg";
 import type { BranchRecord, BranchStatus } from "./types";
 
 type BranchRow = {
-  pr_number: number;
+  id: string | number;
   branch_name: string;
-  branch_database_url: string;
+  source_url: string;
+  branch_url: string;
   status: BranchStatus;
+  owner_github_id: string;
   created_at: Date;
-  updated_at: Date;
+  pr_number: number | null;
 };
 
 export type BranchStateRepository = {
+  create(
+    ownerGithubId: string,
+    record: {
+      branchName: string;
+      sourceUrl: string;
+      branchUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<BranchRecord>;
   upsert(
     ownerGithubId: string,
     record: {
-      prNumber: number;
+      prNumber?: number | null;
       branchName: string;
-      branchDatabaseUrl: string;
+      sourceUrl: string;
+      branchUrl: string;
       status: BranchStatus;
     }
   ): Promise<void>;
@@ -29,12 +41,13 @@ export type BranchStateRepository = {
 
 function mapBranchRow(row: BranchRow): BranchRecord {
   return {
-    prNumber: row.pr_number,
+    id: String(row.id),
     branchName: row.branch_name,
-    branchDatabaseUrl: row.branch_database_url,
+    sourceUrl: row.source_url,
+    branchUrl: row.branch_url,
     status: row.status,
+    ownerGithubId: row.owner_github_id,
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -46,28 +59,63 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     this.pool = new Pool({ connectionString: databaseUrl });
   }
 
+  public async create(
+    ownerGithubId: string,
+    record: {
+      branchName: string;
+      sourceUrl: string;
+      branchUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<BranchRecord> {
+    await this.ensureSchema();
+    const result = await this.pool.query<BranchRow>(
+      `
+      INSERT INTO flowdb_branches (branch_name, source_url, branch_url, status, owner_github_id)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (owner_github_id, branch_name)
+      DO UPDATE SET
+        source_url = EXCLUDED.source_url,
+        branch_url = EXCLUDED.branch_url,
+        status = EXCLUDED.status
+      RETURNING id, branch_name, source_url, branch_url, status, owner_github_id, created_at, pr_number
+      `,
+      [record.branchName, record.sourceUrl, record.branchUrl, record.status, ownerGithubId]
+    );
+
+    return mapBranchRow(result.rows[0]!);
+  }
+
   public async upsert(
     ownerGithubId: string,
     record: {
-      prNumber: number;
+      prNumber?: number | null;
       branchName: string;
-      branchDatabaseUrl: string;
+      sourceUrl: string;
+      branchUrl: string;
       status: BranchStatus;
     }
   ): Promise<void> {
     await this.ensureSchema();
     await this.pool.query(
       `
-      INSERT INTO flowdb_branches (owner_github_id, pr_number, branch_name, branch_database_url, status)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO flowdb_branches (owner_github_id, pr_number, branch_name, source_url, branch_url, status)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (owner_github_id, branch_name)
       DO UPDATE SET
         pr_number = EXCLUDED.pr_number,
-        branch_database_url = EXCLUDED.branch_database_url,
-        status = EXCLUDED.status,
-        updated_at = NOW()
+        source_url = EXCLUDED.source_url,
+        branch_url = EXCLUDED.branch_url,
+        status = EXCLUDED.status
       `,
-      [ownerGithubId, record.prNumber, record.branchName, record.branchDatabaseUrl, record.status]
+      [
+        ownerGithubId,
+        record.prNumber ?? null,
+        record.branchName,
+        record.sourceUrl,
+        record.branchUrl,
+        record.status,
+      ]
     );
   }
 
@@ -78,7 +126,7 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
-      SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
+      SELECT id, branch_name, source_url, branch_url, status, owner_github_id, created_at, pr_number
       FROM flowdb_branches
       WHERE owner_github_id = $1 AND branch_name = $2
       LIMIT 1
@@ -95,10 +143,10 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
-      SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
+      SELECT id, branch_name, source_url, branch_url, status, owner_github_id, created_at, pr_number
       FROM flowdb_branches
       WHERE owner_github_id = $1 AND pr_number = $2
-      ORDER BY updated_at DESC
+      ORDER BY created_at DESC
       LIMIT 1
       `,
       [ownerGithubId, prNumber]
@@ -115,7 +163,7 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     await this.pool.query(
       `
       UPDATE flowdb_branches
-      SET status = $3, updated_at = NOW()
+      SET status = $3
       WHERE owner_github_id = $1 AND branch_name = $2
       `,
       [ownerGithubId, branchName, status]
@@ -126,10 +174,10 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
     await this.ensureSchema();
     const result = await this.pool.query<BranchRow>(
       `
-      SELECT pr_number, branch_name, branch_database_url, status, created_at, updated_at
+      SELECT id, branch_name, source_url, branch_url, status, owner_github_id, created_at, pr_number
       FROM flowdb_branches
-      WHERE owner_github_id = $1 AND status <> 'closed'
-      ORDER BY updated_at DESC
+      WHERE owner_github_id = $1 AND status <> 'TORN_DOWN'
+      ORDER BY created_at DESC
       `,
       [ownerGithubId]
     );
@@ -143,21 +191,47 @@ export class PostgresBranchStateRepository implements BranchStateRepository {
           `
           CREATE TABLE IF NOT EXISTS flowdb_branches (
             id BIGSERIAL PRIMARY KEY,
-            owner_github_id TEXT NOT NULL,
-            pr_number INTEGER NOT NULL,
             branch_name TEXT NOT NULL,
-            branch_database_url TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            branch_url TEXT NOT NULL,
             status TEXT NOT NULL,
+            owner_github_id TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            pr_number INTEGER
           );
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS branch_name TEXT;
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS source_url TEXT;
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS branch_url TEXT;
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS status TEXT;
           ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS owner_github_id TEXT;
-          UPDATE flowdb_branches SET owner_github_id = 'legacy' WHERE owner_github_id IS NULL;
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+          ALTER TABLE flowdb_branches ADD COLUMN IF NOT EXISTS pr_number INTEGER;
+          UPDATE flowdb_branches
+          SET owner_github_id = 'legacy'
+          WHERE owner_github_id IS NULL;
+          UPDATE flowdb_branches
+          SET source_url = ''
+          WHERE source_url IS NULL;
+          UPDATE flowdb_branches
+          SET branch_url = ''
+          WHERE branch_url IS NULL;
+          UPDATE flowdb_branches
+          SET status = 'READY'
+          WHERE status IS NULL;
+          UPDATE flowdb_branches
+          SET created_at = NOW()
+          WHERE created_at IS NULL;
           ALTER TABLE flowdb_branches ALTER COLUMN owner_github_id SET NOT NULL;
-          ALTER TABLE flowdb_branches DROP CONSTRAINT IF EXISTS flowdb_branches_branch_name_key;
+          ALTER TABLE flowdb_branches ALTER COLUMN branch_name SET NOT NULL;
+          ALTER TABLE flowdb_branches ALTER COLUMN source_url SET NOT NULL;
+          ALTER TABLE flowdb_branches ALTER COLUMN branch_url SET NOT NULL;
+          ALTER TABLE flowdb_branches ALTER COLUMN status SET NOT NULL;
+          ALTER TABLE flowdb_branches ALTER COLUMN created_at SET NOT NULL;
           CREATE UNIQUE INDEX IF NOT EXISTS flowdb_branches_owner_branch_uidx
             ON flowdb_branches(owner_github_id, branch_name);
-          CREATE INDEX IF NOT EXISTS flowdb_branches_pr_number_idx ON flowdb_branches(pr_number);
+          CREATE INDEX IF NOT EXISTS flowdb_branches_pr_number_idx
+            ON flowdb_branches(pr_number)
+            WHERE pr_number IS NOT NULL;
           CREATE INDEX IF NOT EXISTS flowdb_branches_owner_github_id_idx ON flowdb_branches(owner_github_id);
           `
         )

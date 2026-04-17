@@ -4,7 +4,7 @@ import { Client, type ClientConfig } from "pg";
 import { ForkTimeoutError } from "./errors";
 import type { BranchInfo, ForkResult } from "./types";
 
-const FORK_TIMEOUT_MS = 500;
+const FORK_TIMEOUT_MS = 5000;
 
 type BranchRow = {
   name: string;

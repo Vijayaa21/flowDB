@@ -6,6 +6,7 @@ import {
   getMissingEnvMessages,
   isProductionRuntime,
 } from "./config";
+import { runPendingMigrations } from "./migrations";
 import { createApp } from "./server";
 
 async function canConnectToDatabase(databaseUrl: string | null): Promise<boolean> {
@@ -29,6 +30,17 @@ async function start(): Promise<void> {
   const config = getConfig();
   if (isProductionRuntime()) {
     assertProductionConfig(config);
+  }
+
+  const migrationDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
+  if (migrationDatabaseUrl) {
+    const applied = await runPendingMigrations({
+      databaseUrl: migrationDatabaseUrl,
+      migrationsDir: config.migrationsDir,
+    });
+    if (applied.length > 0) {
+      console.log(`[orchestrator] applied migrations: ${applied.join(", ")}`);
+    }
   }
 
   const app = createApp();

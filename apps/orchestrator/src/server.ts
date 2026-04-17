@@ -14,7 +14,12 @@ import {
   type BranchStateRepository,
 } from "./branch-state-repository";
 import { runPendingMigrations, type MigrationRunReport } from "./migration-runner";
-import { githubPullRequestSchema, githubPushSchema, vercelWebhookSchema } from "./schemas";
+import {
+  forkBranchSchema,
+  githubPullRequestSchema,
+  githubPushSchema,
+  vercelWebhookSchema,
+} from "./schemas";
 import { verifyGithubSignature } from "./security";
 import { VercelSdkClient, type VercelClient } from "./vercel-client";
 import { getConfig } from "./config";
@@ -158,13 +163,12 @@ class NoopVercelClient implements VercelClient {
 
 function createDefaultDependencies(): OrchestratorDependencies {
   const config = getConfig();
-  const hasDatabase = Boolean(config.databaseUrl);
   const hasVercelToken = Boolean(config.vercelApiToken);
   const githubToken = process.env.GITHUB_TOKEN;
 
   return {
     forkEngine: new PostgreSQLForkEngine(),
-    branches: new PostgresBranchStateRepository(config.sourceDatabaseUrl),
+    branches: new PostgresBranchStateRepository(config.databaseUrl ?? config.sourceDatabaseUrl),
     vercel: hasVercelToken ? new VercelSdkClient(config.vercelApiToken!) : new NoopVercelClient(),
     githubComments: githubToken
       ? new OctokitGithubCommentPublisher(githubToken)
@@ -320,6 +324,23 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     );
   });
 
+  app.get("/", (c) => {
+    return c.json(
+      {
+        service: "flowdb-orchestrator",
+        status: "ok",
+        version: deps.version,
+        requestId: c.get("requestId") as string,
+        endpoints: {
+          health: "/health",
+          metrics: "/metrics",
+          branches: "/branches",
+        },
+      },
+      200
+    );
+  });
+
   app.get("/metrics", (c) => {
     const avgDurationMs =
       metrics.totalRequests > 0 ? metrics.totalDurationMs / metrics.totalRequests : 0;
@@ -352,38 +373,61 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
   app.use("/*", authMiddleware);
 
-  app.get("/branches", async (c) => {
+  app.post("/branches/fork", async (c) => {
     const githubId = c.get("githubId") as string;
-    try {
-      const branches = await deps.branches.listActive(githubId);
-      return c.json(branches, 200);
-    } catch {
-      return c.json([], 200);
+    const payload = await c.req.json();
+    const parsed = forkBranchSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Invalid request body.",
+          details: parsed.error.flatten(),
+        },
+        400
+      );
     }
+
+    const { sourceDatabaseUrl, branchName } = parsed.data;
+    const forkResult = await deps.forkEngine.fork(sourceDatabaseUrl, branchName);
+    const saved = await deps.branches.create(githubId, {
+      branchName,
+      sourceUrl: sourceDatabaseUrl,
+      branchUrl: forkResult.branchDatabaseUrl,
+      status: "READY",
+    });
+
+    return c.json(saved, 201);
   });
 
-  app.get("/branches/:name", async (c) => {
+  app.get("/branches", async (c) => {
     const githubId = c.get("githubId") as string;
-    const name = c.req.param("name");
-    const branch = await deps.branches.getByBranchName(githubId, name);
+    const branches = await deps.branches.listActive(githubId);
+    return c.json(branches, 200);
+  });
+
+  app.get("/branches/:branchName", async (c) => {
+    const githubId = c.get("githubId") as string;
+    const branchName = c.req.param("branchName");
+    const branch = await deps.branches.getByBranchName(githubId, branchName);
     if (!branch) {
-      return c.json({ error: `Branch "${name}" not found.` }, 404);
+      return c.json({ error: `Branch "${branchName}" not found.` }, 404);
     }
     return c.json(branch);
   });
 
-  app.delete("/branches/:name", async (c) => {
+  app.delete("/branches/:branchName", async (c) => {
     const githubId = c.get("githubId") as string;
-    const name = c.req.param("name");
-    const branch = await deps.branches.getByBranchName(githubId, name);
+    const branchName = c.req.param("branchName");
+    const branch = await deps.branches.getByBranchName(githubId, branchName);
 
     if (!branch) {
-      return c.json({ error: `Branch "${name}" not found.` }, 404);
+      return c.json({ error: `Branch "${branchName}" not found.` }, 404);
     }
 
-    await deps.forkEngine.teardown(branch.branchDatabaseUrl);
-    await deps.branches.setStatus(githubId, name, "closed");
-    return c.body(null, 204);
+    await deps.forkEngine.teardown(branch.branchUrl);
+    await deps.branches.setStatus(githubId, branchName, "TORN_DOWN");
+    return c.json({ success: true }, 200);
   });
 
   app.post("/webhooks/github", async (c) => {
@@ -438,7 +482,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           const existing = byPr ?? byBranch;
 
           // Ignore duplicate delivery for already-active branch records.
-          if (existing && existing.status !== "closed") {
+          if (existing && existing.status !== "TORN_DOWN") {
             return;
           }
 
@@ -449,8 +493,9 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           await deps.branches.upsert(githubId, {
             prNumber: payload.pull_request.number,
             branchName: payload.pull_request.head.ref,
-            branchDatabaseUrl: branchDatabaseUrl.branchDatabaseUrl,
-            status: "active",
+            sourceUrl: deps.sourceDatabaseUrl,
+            branchUrl: branchDatabaseUrl.branchDatabaseUrl,
+            status: "READY",
           });
         });
       }
@@ -464,8 +509,8 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
           if (!target) {
             return;
           }
-          await deps.forkEngine.teardown(target.branchDatabaseUrl);
-          await deps.branches.setStatus(githubId, target.branchName, "closed");
+          await deps.forkEngine.teardown(target.branchUrl);
+          await deps.branches.setStatus(githubId, target.branchName, "TORN_DOWN");
         });
       }
 
@@ -489,22 +534,22 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         const owner = parsed.data.repository?.owner.login;
         const repo = parsed.data.repository?.name;
 
-        await deps.branches.setStatus(githubId, branchName, "migrating");
+        await deps.branches.setStatus(githubId, branchName, "MIGRATING");
         let report: MigrationRunReport = {
           applied: [],
           pending: [],
           schemaDiffSummary: "No migrations were applied.",
           conflicts: [],
         };
-        let status = "active";
+        let status = "READY";
 
         try {
-          report = await deps.migrationRunner(deps.projectRoot, branch.branchDatabaseUrl);
-          await deps.branches.setStatus(githubId, branchName, "active");
-          status = "active";
+          report = await deps.migrationRunner(deps.projectRoot, branch.branchUrl);
+          await deps.branches.setStatus(githubId, branchName, "READY");
+          status = "READY";
         } catch {
-          await deps.branches.setStatus(githubId, branchName, "error");
-          status = "error";
+          await deps.branches.setStatus(githubId, branchName, "ERROR");
+          status = "ERROR";
         }
 
         if (owner && repo) {
@@ -552,7 +597,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         const branch = branchName
           ? await deps.branches.getByBranchName(githubId, branchName as string)
           : null;
-        const databaseUrl = branch?.branchDatabaseUrl ?? deps.sourceDatabaseUrl;
+        const databaseUrl = branch?.branchUrl ?? deps.sourceDatabaseUrl;
         if (deployment.id) {
           await deps.vercel.injectDeploymentDatabaseUrl(deployment.id as string, databaseUrl);
         }

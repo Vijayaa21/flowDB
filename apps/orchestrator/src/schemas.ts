@@ -41,3 +41,12 @@ export const vercelWebhookSchema = z.object({
     })
     .optional(),
 });
+
+export const forkBranchSchema = z.object({
+  sourceDatabaseUrl: z.string().url(),
+  branchName: z
+    .string()
+    .min(1)
+    .max(63)
+    .regex(/^[a-zA-Z0-9._\/-]+$/, "Invalid branch name format."),
+});

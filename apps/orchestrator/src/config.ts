@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Config = {
   port: number;
@@ -31,6 +32,8 @@ function parsePort(value: string | null): number {
 export function getConfig(): Config {
   const databaseUrl = readOptional("DATABASE_URL");
   const sourceDatabaseUrl = readOptional("SOURCE_DATABASE_URL") ?? databaseUrl ?? "";
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const orchestratorRoot = path.resolve(path.dirname(currentFilePath), "..");
 
   return {
     port: parsePort(readOptional("PORT")),
@@ -41,7 +44,7 @@ export function getConfig(): Config {
     vercelApiToken: readOptional("VERCEL_API_TOKEN"),
     projectRoot: readOptional("FLOWDB_PROJECT_ROOT") ?? process.cwd(),
     version: readOptional("FLOWDB_VERSION") ?? "0.1.0",
-    migrationsDir: path.resolve(process.cwd(), "apps", "orchestrator", "migrations"),
+    migrationsDir: path.resolve(orchestratorRoot, "migrations"),
   };
 }
 

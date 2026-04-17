@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { signOut, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { toast } from "sonner";
 
 import {
@@ -84,17 +84,38 @@ function BranchHealthFeed({
   data,
   isLoading,
   isError,
+  requiresAuth,
   deletingBranch,
   onRetry,
+  onSignIn,
   onTeardown,
 }: {
   data: Branch[];
   isLoading: boolean;
   isError: boolean;
+  requiresAuth: boolean;
   deletingBranch: string | null;
   onRetry: () => void;
+  onSignIn: () => void;
   onTeardown: (name: string) => Promise<void>;
 }) {
+  if (requiresAuth) {
+    return (
+      <div className="rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4 text-sm text-(--gh-fg-muted)">
+        <div className="flex items-center justify-between gap-3">
+          <span>Sign in with GitHub to load branch health feed.</span>
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="rounded-md bg-(--gh-accent-emphasis) px-2 py-1 text-xs text-white hover:brightness-110"
+          >
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return <BranchFeedSkeleton />;
   }
@@ -154,6 +175,8 @@ function BranchHealthFeed({
 
 export default function HomePage() {
   const { data: session } = useSession();
+  const hasFlowDbToken = Boolean(session?.token);
+  const isSignedIn = Boolean(session?.user);
   const [config, setConfig] = useState<DashboardConfig>(() => readDashboardConfig());
   const [draftConfig, setDraftConfig] = useState<DashboardConfig>(() => readDashboardConfig());
   const [activeSection, setActiveSection] = useState<SectionKey>("branches");
@@ -164,6 +187,7 @@ export default function HomePage() {
   const branchesQuery = useQuery({
     queryKey: queryKeys.branches(config),
     queryFn: () => api.branches.list(config),
+    enabled: hasFlowDbToken,
     refetchInterval: 30000,
   });
 
@@ -268,6 +292,10 @@ export default function HomePage() {
     }
   };
 
+  const handleSignIn = () => {
+    void signIn("github", { callbackUrl: "/" });
+  };
+
   return (
     <div className="min-h-screen bg-(--gh-canvas-subtle) text-(--gh-fg-default)">
       <div className="mx-auto flex w-full max-w-7xl">
@@ -324,7 +352,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-(--gh-fg-default)">{userName}</p>
                 <p className="truncate text-xs text-(--gh-fg-muted)">
-                  {githubId ? `GitHub #${githubId}` : "Signed in with GitHub"}
+                  {githubId ? `GitHub #${githubId}` : "Not signed in"}
                 </p>
               </div>
             </div>
@@ -352,16 +380,29 @@ export default function HomePage() {
               <span className="hidden lg:inline">Theme Settings</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => void signOut({ callbackUrl: "/login" })}
-              className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--gh-fg-muted) hover:bg-(--gh-canvas-subtle) hover:text-(--gh-fg-default)"
-            >
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-(--gh-border-default) text-xs">
-                O
-              </span>
-              <span className="hidden lg:inline">Sign out</span>
-            </button>
+            {isSignedIn ? (
+              <button
+                type="button"
+                onClick={() => void signOut({ callbackUrl: "/login" })}
+                className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--gh-fg-muted) hover:bg-(--gh-canvas-subtle) hover:text-(--gh-fg-default)"
+              >
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-(--gh-border-default) text-xs">
+                  O
+                </span>
+                <span className="hidden lg:inline">Sign out</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSignIn}
+                className="mt-2 flex w-full items-center gap-3 rounded-xl bg-(--gh-accent-emphasis) px-3 py-2 text-sm text-white hover:brightness-110"
+              >
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/40 text-xs">
+                  I
+                </span>
+                <span className="hidden lg:inline">Sign in with GitHub</span>
+              </button>
+            )}
           </div>
         </aside>
 
@@ -416,10 +457,12 @@ export default function HomePage() {
                 data={branches}
                 isLoading={branchesQuery.isLoading}
                 isError={branchesQuery.isError}
+                requiresAuth={!hasFlowDbToken}
                 deletingBranch={deletingBranch}
                 onRetry={() => {
                   void branchesQuery.refetch();
                 }}
+                onSignIn={handleSignIn}
                 onTeardown={handleTeardown}
               />
             </section>
