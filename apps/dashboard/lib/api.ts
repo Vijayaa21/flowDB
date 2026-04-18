@@ -3,16 +3,18 @@
 import { getSession } from "next-auth/react";
 
 const DEFAULT_ORCHESTRATOR_URL =
-  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3000";
+  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3001";
 const DEFAULT_ORG_SLUG = process.env.NEXT_PUBLIC_FLOWDB_ORG_SLUG ?? "";
 const DEFAULT_PROJECT_SLUG = process.env.NEXT_PUBLIC_FLOWDB_PROJECT_SLUG ?? "";
 const DEFAULT_ENVIRONMENT = process.env.NEXT_PUBLIC_FLOWDB_ENVIRONMENT ?? "local";
+const DEFAULT_SOURCE_DATABASE_URL = process.env.NEXT_PUBLIC_FLOWDB_SOURCE_DATABASE_URL ?? "";
 
 const CONFIG_KEYS = {
   orchestratorUrl: "flowdb.orchestratorUrl",
   orgSlug: "flowdb.orgSlug",
   projectSlug: "flowdb.projectSlug",
   environment: "flowdb.environment",
+  sourceDatabaseUrl: "flowdb.sourceDatabaseUrl",
 } as const;
 
 export type DashboardConfig = {
@@ -20,6 +22,7 @@ export type DashboardConfig = {
   orgSlug: string;
   projectSlug: string;
   environment: string;
+  sourceDatabaseUrl: string;
 };
 
 export type Branch = {
@@ -60,6 +63,7 @@ export function readDashboardConfig(): DashboardConfig {
       orgSlug: DEFAULT_ORG_SLUG,
       projectSlug: DEFAULT_PROJECT_SLUG,
       environment: DEFAULT_ENVIRONMENT,
+      sourceDatabaseUrl: DEFAULT_SOURCE_DATABASE_URL,
     };
   }
 
@@ -74,6 +78,9 @@ export function readDashboardConfig(): DashboardConfig {
     environment: (
       window.localStorage.getItem(CONFIG_KEYS.environment) ?? DEFAULT_ENVIRONMENT
     ).trim(),
+    sourceDatabaseUrl: (
+      window.localStorage.getItem(CONFIG_KEYS.sourceDatabaseUrl) ?? DEFAULT_SOURCE_DATABASE_URL
+    ).trim(),
   };
 }
 
@@ -83,6 +90,7 @@ export function saveDashboardConfig(config: DashboardConfig): DashboardConfig {
     orgSlug: config.orgSlug.trim(),
     projectSlug: config.projectSlug.trim(),
     environment: config.environment.trim() || DEFAULT_ENVIRONMENT,
+    sourceDatabaseUrl: config.sourceDatabaseUrl.trim(),
   };
 
   if (typeof window !== "undefined") {
@@ -90,10 +98,25 @@ export function saveDashboardConfig(config: DashboardConfig): DashboardConfig {
     window.localStorage.setItem(CONFIG_KEYS.orgSlug, normalized.orgSlug);
     window.localStorage.setItem(CONFIG_KEYS.projectSlug, normalized.projectSlug);
     window.localStorage.setItem(CONFIG_KEYS.environment, normalized.environment);
+    window.localStorage.setItem(CONFIG_KEYS.sourceDatabaseUrl, normalized.sourceDatabaseUrl);
   }
 
   return normalized;
 }
+
+export type CreateBranchRequest = {
+  branchName: string;
+  sourceDatabaseUrl: string;
+};
+
+export type CreateBranchResponse = {
+  id: string;
+  branchName: string;
+  sourceUrl: string;
+  branchUrl: string;
+  status: string;
+  createdAt: string;
+};
 
 async function apiFetch<T>(
   path: string,
@@ -138,6 +161,18 @@ async function apiFetch<T>(
 
 export const api = {
   branches: {
+    create: (payload: CreateBranchRequest, config: DashboardConfig) =>
+      apiFetch<CreateBranchResponse>("/branches/fork", config, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          branchName: payload.branchName,
+          sourceDatabaseUrl: payload.sourceDatabaseUrl,
+          idempotencyKey: buildRequestId(),
+        }),
+      }),
     list: async (config: DashboardConfig) => {
       const response = await apiFetch<BranchListResponse>("/branches", config);
       if (Array.isArray(response)) {

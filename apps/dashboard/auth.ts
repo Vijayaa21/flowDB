@@ -5,8 +5,8 @@ import GitHub from "next-auth/providers/github";
 /*
 GitHub OAuth App setup for local FlowDB development:
 1. Open GitHub Settings -> Developer settings -> OAuth Apps -> New OAuth App.
-2. Set Homepage URL to http://localhost:3001.
-3. Set Authorization callback URL to http://localhost:3001/api/auth/callback/github.
+2. Set Homepage URL to http://localhost:3000.
+3. Set Authorization callback URL to http://localhost:3000/api/auth/callback/github.
 4. Copy the client ID and client secret into dashboard environment variables.
 */
 

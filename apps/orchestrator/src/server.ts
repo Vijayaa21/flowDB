@@ -261,9 +261,19 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   app.use(
     "/*",
     cors({
-      origin: ["http://localhost:4010", "http://localhost:3001"],
+      // Local dashboard runs on :3000. Keep :3001 and :4010 for existing tooling setups.
+      origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:4010"],
       allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Request-Id",
+        "X-Org-Slug",
+        "X-Project-Slug",
+        "X-FlowDB-Environment",
+        "Accept",
+      ],
+      exposeHeaders: ["x-request-id"],
     })
   );
 
