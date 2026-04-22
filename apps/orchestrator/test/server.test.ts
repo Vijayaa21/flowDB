@@ -284,11 +284,13 @@ describe("orchestrator routes", () => {
   test("GET /metrics captures webhook and background task counters", async () => {
     const pullRequestPayload = {
       action: "opened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 777, head: { ref: "feature/metrics" } },
     };
 
     const invalidPayload = {
       action: "opened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 778, head: { ref: "feature/invalid" } },
     };
 
@@ -299,6 +301,7 @@ describe("orchestrator routes", () => {
           id: "dep_metrics_1",
           target: "preview",
           meta: {
+            githubOwner: "12345",
             githubCommitRef: "feature/metrics",
           },
         },
@@ -307,7 +310,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-open-777")
       .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
@@ -315,7 +317,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-open-777")
       .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
@@ -323,7 +324,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-invalid-778")
       .set("x-hub-signature-256", "sha256=invalid")
@@ -331,7 +331,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/vercel")
-      .set("authorization", authHeader)
       .send(vercelPayload);
 
     const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-2");
@@ -359,13 +358,13 @@ describe("orchestrator routes", () => {
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {
     const payload = {
       action: "opened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 101, head: { ref: "feature/api" } },
     };
 
     const startedAt = Date.now();
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-open-101")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -391,12 +390,12 @@ describe("orchestrator routes", () => {
 
     const payload = {
       action: "reopened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 150, head: { ref: "feature/reopen" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-reopen-150")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -421,12 +420,12 @@ describe("orchestrator routes", () => {
 
     const payload = {
       action: "opened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 160, head: { ref: "feature/dupe" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-dupe-160")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -446,10 +445,12 @@ describe("orchestrator routes", () => {
       status: "READY",
     });
 
-    const payload = { ref: "refs/heads/feature/push" };
+    const payload = {
+      ref: "refs/heads/feature/push",
+      repository: { name: "flowdb", owner: { login: "12345" } },
+    };
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "push")
       .set("x-github-delivery", "del-push-200")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -470,12 +471,12 @@ describe("orchestrator routes", () => {
 
     const payload = {
       action: "closed",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 300, head: { ref: "feature/close" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-close-300")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -501,6 +502,7 @@ describe("orchestrator routes", () => {
           id: "dep_123",
           target: "preview",
           meta: {
+            githubOwner: "12345",
             githubCommitRef: "feature/preview",
           },
         },
@@ -509,7 +511,6 @@ describe("orchestrator routes", () => {
 
     const response = await request(server)
       .post("/webhooks/vercel")
-      .set("authorization", authHeader)
       .send(payload);
 
     expect(response.status).toBe(200);
@@ -613,6 +614,7 @@ describe("orchestrator routes", () => {
   test("POST /webhooks/github ignores replayed delivery ids", async () => {
     const payload = {
       action: "opened",
+      repository: { owner: { login: "12345" } },
       pull_request: { number: 610, head: { ref: "feature/replay" } },
     };
 

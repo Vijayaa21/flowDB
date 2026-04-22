@@ -103,8 +103,11 @@ type BackgroundTaskMetrics = {
   scheduled: number;
   succeeded: number;
   failed: number;
+  retries: number;
+  deadLettered: number;
   totalDurationMs: number;
   byName: Record<string, number>;
+  deadLetterByName: Record<string, number>;
 };
 
 function createRequestMetrics(): RequestMetrics {
@@ -138,8 +141,11 @@ function createBackgroundTaskMetrics(): BackgroundTaskMetrics {
     scheduled: 0,
     succeeded: 0,
     failed: 0,
+    retries: 0,
+    deadLettered: 0,
     totalDurationMs: 0,
     byName: {},
+    deadLetterByName: {},
   };
 }
 
@@ -153,6 +159,33 @@ function getRequestId(headerValue: string | undefined): string {
     return trimmed;
   }
   return randomUUID();
+}
+
+function getWebhookOwnerIdFromPullRequest(payload: {
+  repository?: { owner?: { login?: string } };
+  pull_request: { head: { repo?: { owner?: { login?: string } } } };
+}): string | null {
+  return (
+    payload.repository?.owner?.login?.trim() ||
+    payload.pull_request.head.repo?.owner?.login?.trim() ||
+    null
+  );
+}
+
+function getWebhookOwnerIdFromPush(payload: {
+  repository?: { owner?: { login?: string } };
+}): string | null {
+  return payload.repository?.owner?.login?.trim() || null;
+}
+
+function getWebhookOwnerIdFromVercel(payload: {
+  payload?: { deployment?: { meta?: Record<string, string> } };
+}): string | null {
+  return (
+    payload.payload?.deployment?.meta?.githubOwner?.trim() ||
+    payload.payload?.deployment?.meta?.githubOwnerId?.trim() ||
+    null
+  );
 }
 
 class NoopVercelClient implements VercelClient {
@@ -231,31 +264,59 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
   const webhookMetrics = createWebhookMetrics();
   const backgroundTaskMetrics = createBackgroundTaskMetrics();
 
-  const runBackgroundTask = (name: string, task: () => Promise<void>): void => {
+  const runBackgroundTask = (name: string, task: () => Promise<void>, maxRetries: number = 3): void => {
     backgroundTaskMetrics.scheduled += 1;
     incrementCounter(backgroundTaskMetrics.byName, name);
 
-    deps.scheduleTask(async () => {
+    const executeWithRetry = async (attempt: number = 0): Promise<void> => {
       const startedAt = performance.now();
       try {
         await task();
         backgroundTaskMetrics.succeeded += 1;
       } catch (error) {
-        backgroundTaskMetrics.failed += 1;
-        console.error(
-          JSON.stringify({
-            timestamp: new Date().toISOString(),
-            level: "error",
-            event: "background_task_failed",
-            taskName: name,
-            error: error instanceof Error ? error.message : "Unknown error",
-          })
-        );
+        const isLastAttempt = attempt >= maxRetries - 1;
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        const delayMs = attempt > 0 ? Math.min(1000 * Math.pow(2, attempt - 1), 30000) : 0;
+
+        if (isLastAttempt) {
+          backgroundTaskMetrics.deadLettered += 1;
+          incrementCounter(backgroundTaskMetrics.deadLetterByName, name);
+          console.error(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: "error",
+              event: "background_task_dead_lettered",
+              taskName: name,
+              attempt: attempt + 1,
+              maxRetries,
+              error: errorMsg,
+              durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+            })
+          );
+        } else {
+          backgroundTaskMetrics.retries += 1;
+          console.warn(
+            JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: "warn",
+              event: "background_task_retry",
+              taskName: name,
+              attempt: attempt + 1,
+              nextRetryMs: delayMs,
+              error: errorMsg,
+            })
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          await executeWithRetry(attempt + 1);
+          return;
+        }
       } finally {
         backgroundTaskMetrics.totalDurationMs +=
           Math.round((performance.now() - startedAt) * 100) / 100;
       }
-    });
+    };
+
+    deps.scheduleTask(executeWithRetry);
   };
 
   app.use(
@@ -381,7 +442,14 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     );
   });
 
-  app.use("/*", authMiddleware);
+  app.use("/*", async (c, next) => {
+    if (c.req.path.startsWith("/webhooks/")) {
+      await next();
+      return;
+    }
+
+    return authMiddleware(c, next);
+  });
 
   app.post("/branches/fork", async (c) => {
     const githubId = c.get("githubId") as string;
@@ -481,7 +549,11 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 
       const payload = parsed.data;
       incrementCounter(webhookMetrics.githubByAction, payload.action);
-      const githubId = c.get("githubId") as string;
+      const githubId = getWebhookOwnerIdFromPullRequest(payload);
+      if (!githubId) {
+        webhookMetrics.githubInvalidPayloads += 1;
+        return c.json({ error: "Missing repository owner in pull_request payload." }, 400);
+      }
       if (payload.action === "opened" || payload.action === "reopened") {
         runBackgroundTask("github.pull_request.open_or_reopen", async () => {
           const byPr = await deps.branches.getByPrNumber(githubId, payload.pull_request.number);
@@ -534,8 +606,13 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
         return c.json({ error: "Invalid push payload." }, 400);
       }
 
+      const githubId = getWebhookOwnerIdFromPush(parsed.data);
+      if (!githubId) {
+        webhookMetrics.githubInvalidPayloads += 1;
+        return c.json({ error: "Missing repository owner in push payload." }, 400);
+      }
+
       runBackgroundTask("github.push", async () => {
-        const githubId = c.get("githubId") as string;
         const branchName = toBranchName(parsed.data.ref);
         const branch = await deps.branches.getByBranchName(githubId, branchName);
         if (!branch) {
@@ -600,12 +677,12 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     if (payload.type === "deployment.ready" && deployment?.target === "preview") {
       webhookMetrics.vercelPreviewReady += 1;
       runBackgroundTask("vercel.deployment.ready.preview", async () => {
-        const githubId = c.get("githubId") as string;
+        const githubId = getWebhookOwnerIdFromVercel(payload);
         const branchName = (deployment.meta?.githubCommitRef ?? payload.payload?.git?.branch) as
           | string
           | undefined;
         const branch = branchName
-          ? await deps.branches.getByBranchName(githubId, branchName as string)
+          ? await deps.branches.getByBranchName(githubId ?? "", branchName as string)
           : null;
         const databaseUrl = branch?.branchUrl ?? deps.sourceDatabaseUrl;
         if (deployment.id) {

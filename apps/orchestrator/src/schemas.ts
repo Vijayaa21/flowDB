@@ -2,10 +2,24 @@ import { z } from "zod";
 
 export const githubPullRequestSchema = z.object({
   action: z.enum(["opened", "reopened", "closed"]),
+  repository: z
+    .object({
+      owner: z.object({
+        login: z.string().min(1),
+      }),
+    })
+    .optional(),
   pull_request: z.object({
     number: z.number().int(),
     head: z.object({
       ref: z.string().min(1),
+      repo: z
+        .object({
+          owner: z.object({
+            login: z.string().min(1),
+          }),
+        })
+        .optional(),
     }),
   }),
 });
