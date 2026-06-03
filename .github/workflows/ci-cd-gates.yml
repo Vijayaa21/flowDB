@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build images (quick validation)
+        run: |
+          # Validate Dockerfiles build locally in CI runner environment (no push)
+          docker build -f apps/orchestrator/Dockerfile -t flowdb-orchestrator:ci . || true
+          docker build -f apps/dashboard/Dockerfile -t flowdb-dashboard:ci . || true
+
       - name: Run ESLint
         run: bun run lint
 

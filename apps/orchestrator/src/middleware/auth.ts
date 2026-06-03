@@ -52,7 +52,9 @@ function verifyJwt(token: string, secret: string): JwtPayload | null {
   }
 }
 
-export const authMiddleware: MiddlewareHandler<{ Variables: { githubId: string } }> = async (
+export const authMiddleware: MiddlewareHandler<{
+  Variables: { githubId: string; requestId: string };
+}> = async (
   c,
   next
 ) => {

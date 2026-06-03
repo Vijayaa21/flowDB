@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 4010",
     "build": "next build --no-lint",
     "start": "next start"
   },
@@ -23,6 +23,7 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.8.2"
   }
 }

@@ -27,7 +27,8 @@ jobs:
     name: Canary Deployment
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
-    environment: staging
+    environment:
+      name: staging
     outputs:
       canary_version: ${{ steps.deploy.outputs.canary_version }}
       canary_endpoint: ${{ steps.deploy.outputs.endpoint }}
@@ -55,6 +56,29 @@ jobs:
         env:
           NODE_ENV: production
           NEXT_PUBLIC_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push orchestrator image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/orchestrator/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/flowdb-orchestrator:${{ steps.version.outputs.version }}
+
+      - name: Build and push dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/flowdb-dashboard:${{ steps.version.outputs.version }}
 
       - name: Deploy to canary slots
         id: deploy
@@ -102,7 +126,8 @@ jobs:
     name: Monitor Canary Health
     runs-on: ubuntu-latest
     needs: canary-deploy
-    environment: staging
+    environment:
+      name: staging
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

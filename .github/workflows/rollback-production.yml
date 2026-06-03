@@ -19,7 +19,8 @@ jobs:
   verify-rollback-authority:
     name: Verify Rollback Authority
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
     steps:
       - name: Verify escalation authority
         run: |
@@ -39,7 +40,8 @@ jobs:
     name: Execute Rollback
     runs-on: ubuntu-latest
     needs: verify-rollback-authority
-    environment: production
+    environment:
+      name: production
     outputs:
       previous_version: ${{ steps.rollback.outputs.from_version }}
       target_version: ${{ steps.rollback.outputs.to_version }}
@@ -94,7 +96,8 @@ jobs:
     name: Verify Rollback Success
     runs-on: ubuntu-latest
     needs: execute-rollback
-    environment: production
+    environment:
+      name: production
     steps:
       - uses: actions/checkout@v4
 
