@@ -10,7 +10,7 @@ describe("renderReconcileCommentMarkdown", () => {
       branchDbStatus: "active",
       pendingMigrations: ["prisma/migrations/202601010001_init/migration.sql"],
       schemaDiffSummary: "Applied 1 of 1 pending migration(s).",
-      conflicts: [{ table: "users", column: "email" }]
+      conflicts: [{ table: "users", column: "email" }],
     });
 
     const html = await marked.parse(markdown);

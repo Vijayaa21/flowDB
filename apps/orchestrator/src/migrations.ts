@@ -46,10 +46,10 @@ export async function runPendingMigrations(input: RunPendingMigrationsInput): Pr
       await client.query("BEGIN");
       try {
         await client.query(sql);
-        await client.query(
-          "INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)",
-          [migrationName, checksum]
-        );
+        await client.query("INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)", [
+          migrationName,
+          checksum,
+        ]);
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");

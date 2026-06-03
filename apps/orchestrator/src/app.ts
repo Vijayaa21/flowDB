@@ -6,7 +6,7 @@ export function createApp() {
   app.get("/health", (c) => {
     return c.json({
       status: "ok",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   });
 

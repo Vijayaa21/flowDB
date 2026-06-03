@@ -23,7 +23,7 @@ async function parseSqlFile(
     filename,
     appliedAt: fileStat.mtime,
     sql,
-    orm
+    orm,
   };
 }
 
@@ -85,7 +85,7 @@ export async function parseMigrations(projectRoot: string): Promise<Migration[]>
   const [prisma, drizzle, raw] = await Promise.all([
     parsePrismaMigrations(projectRoot),
     parseFlatSqlDirectory(projectRoot, path.join(projectRoot, "drizzle"), "drizzle"),
-    parseFlatSqlDirectory(projectRoot, path.join(projectRoot, "migrations"), "raw")
+    parseFlatSqlDirectory(projectRoot, path.join(projectRoot, "migrations"), "raw"),
   ]);
 
   return [...prisma, ...drizzle, ...raw].sort((a, b) => a.filename.localeCompare(b.filename));

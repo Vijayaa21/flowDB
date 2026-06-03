@@ -3,31 +3,14 @@
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 
-type AuthProvidersResponse = {
-  github?: {
-    signinUrl?: string;
-  };
-};
-
 export default function LoginPage() {
   const handleGithubLogin = async () => {
     try {
-      const response = await fetch("/api/auth/providers", { cache: "no-store" });
-      const providers = (await response.json()) as AuthProvidersResponse;
-      const signinUrl = providers.github?.signinUrl ?? "";
-
-      if (signinUrl.includes("client_id=YOUR_") || signinUrl.includes("client_id=dummy")) {
-        toast.error(
-          "GitHub OAuth is not configured yet. Set real GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in apps/dashboard/.env.local."
-        );
-        return;
-      }
+      await signIn("github", { callbackUrl: "/" });
     } catch {
-      toast.error("Unable to verify GitHub OAuth settings. Please try again.");
+      toast.error("GitHub login failed. Check apps/dashboard/.env.local OAuth settings.");
       return;
     }
-
-    await signIn("github", { callbackUrl: "/" });
   };
 
   return (
@@ -39,6 +22,9 @@ export default function LoginPage() {
         <h1 className="mt-5 text-center text-2xl font-semibold text-slate-900 dark:text-slate-100">
           Welcome to FlowDB
         </h1>
+        <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-300">
+          Sign in with GitHub to create your account and continue.
+        </p>
         <button
           type="button"
           onClick={() => void handleGithubLogin()}
@@ -47,7 +33,10 @@ export default function LoginPage() {
           Continue with GitHub
         </button>
         <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">
-          Configure GitHub OAuth credentials in apps/dashboard/.env.local
+          No password signup is required. Configure GitHub OAuth in apps/dashboard/.env.local.
+        </p>
+        <p className="mt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+          New here? Visit /signup for the same GitHub onboarding flow.
         </p>
       </section>
     </main>

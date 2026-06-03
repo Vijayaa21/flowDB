@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Config = {
   port: number;
@@ -21,7 +22,9 @@ function parsePort(value: string | null): number {
   const portValue = value ?? "3000";
   const parsed = Number(portValue);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error(`Invalid PORT value: \"${portValue}\". PORT must be an integer between 1 and 65535.`);
+    throw new Error(
+      `Invalid PORT value: \"${portValue}\". PORT must be an integer between 1 and 65535.`
+    );
   }
   return parsed;
 }
@@ -29,6 +32,8 @@ function parsePort(value: string | null): number {
 export function getConfig(): Config {
   const databaseUrl = readOptional("DATABASE_URL");
   const sourceDatabaseUrl = readOptional("SOURCE_DATABASE_URL") ?? databaseUrl ?? "";
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const orchestratorRoot = path.resolve(path.dirname(currentFilePath), "..");
 
   return {
     port: parsePort(readOptional("PORT")),
@@ -39,7 +44,7 @@ export function getConfig(): Config {
     vercelApiToken: readOptional("VERCEL_API_TOKEN"),
     projectRoot: readOptional("FLOWDB_PROJECT_ROOT") ?? process.cwd(),
     version: readOptional("FLOWDB_VERSION") ?? "0.1.0",
-    migrationsDir: path.resolve(process.cwd(), "apps", "orchestrator", "migrations")
+    migrationsDir: path.resolve(orchestratorRoot, "migrations"),
   };
 }
 
@@ -69,10 +74,14 @@ export function getMissingEnvMessages(): string[] {
   const missing: string[] = [];
 
   if (!readOptional("DATABASE_URL")) {
-    missing.push("DATABASE_URL is missing. Branch endpoints will return an empty array until it is set.");
+    missing.push(
+      "DATABASE_URL is missing. Branch endpoints will return an empty array until it is set."
+    );
   }
   if (!readOptional("GITHUB_WEBHOOK_SECRET")) {
-    missing.push("GITHUB_WEBHOOK_SECRET is missing. GitHub webhook signature verification will fail.");
+    missing.push(
+      "GITHUB_WEBHOOK_SECRET is missing. GitHub webhook signature verification will fail."
+    );
   }
   if (!readOptional("VERCEL_API_TOKEN")) {
     missing.push("VERCEL_API_TOKEN is missing. Vercel deployment variable injection is disabled.");

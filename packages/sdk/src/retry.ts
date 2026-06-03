@@ -15,7 +15,7 @@ export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   maxRetries: 3,
   initialDelayMs: 100,
   maxDelayMs: 10000,
-  backoffMultiplier: 2
+  backoffMultiplier: 2,
 };
 
 /**
@@ -28,10 +28,7 @@ export function sleep(ms: number): Promise<void> {
 /**
  * Calculate next retry delay with exponential backoff
  */
-export function calculateBackoffDelay(
-  attempt: number,
-  options: RetryOptions
-): number {
+export function calculateBackoffDelay(attempt: number, options: RetryOptions): number {
   const exponentialDelay = options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt);
   return Math.min(exponentialDelay, options.maxDelayMs);
 }
@@ -74,10 +71,7 @@ export async function retryWithBackoff<T>(
 /**
  * Timeout wrapper for promises
  */
-export async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number
-): Promise<T> {
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -87,12 +81,12 @@ export async function withTimeout<T>(
             new FlowDBError({
               code: "TIMEOUT",
               message: `Operation timed out after ${timeoutMs}ms`,
-              retryable: true
+              retryable: true,
             })
           ),
         timeoutMs
       )
-    )
+    ),
   ]);
 }
 
@@ -104,8 +98,5 @@ export async function withTimeoutAndRetry<T>(
   timeoutMs: number,
   retryOptions?: Partial<RetryOptions>
 ): Promise<T> {
-  return retryWithBackoff(
-    () => withTimeout(fn(), timeoutMs),
-    retryOptions
-  );
+  return retryWithBackoff(() => withTimeout(fn(), timeoutMs), retryOptions);
 }

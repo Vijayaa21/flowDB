@@ -47,10 +47,10 @@ export async function runPendingMigrations(
       await client.query("BEGIN");
       try {
         await client.query(migration.sql);
-        await client.query(
-          "INSERT INTO flowdb_applied_migrations (id, filename) VALUES ($1, $2)",
-          [migration.id, migration.filename]
-        );
+        await client.query("INSERT INTO flowdb_applied_migrations (id, filename) VALUES ($1, $2)", [
+          migration.id,
+          migration.filename,
+        ]);
         await client.query("COMMIT");
         applied.push(migration.id);
       } catch (error) {
@@ -65,8 +65,8 @@ export async function runPendingMigrations(
       schemaDiffSummary: `Applied ${applied.length} of ${pendingNames.length} pending migration(s).`,
       conflicts: reconciliation.conflicts.map((conflict) => ({
         table: conflict.table,
-        column: conflict.column
-      }))
+        column: conflict.column,
+      })),
     };
   } finally {
     await client.end();

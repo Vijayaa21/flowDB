@@ -1,0 +1,24 @@
+{
+  "name": "@flowdb/load-tester",
+  "version": "1.0.0",
+  "description": "Load testing harness for FlowDB",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "load-test": "tsx src/load-test.ts",
+    "soak-test": "tsx src/soak-test.ts",
+    "spike-test": "tsx src/spike-test.ts",
+    "stress-test": "tsx src/stress-test.ts"
+  },
+  "dependencies": {
+    "autocannon": "^7.12.0",
+    "axios": "^1.6.0",
+    "chalk": "^5.4.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

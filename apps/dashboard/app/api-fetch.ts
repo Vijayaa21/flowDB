@@ -13,6 +13,6 @@ export async function apiFetch(url: string, session: Session | null, init: Fetch
   return fetch(url, {
     ...init,
     headers,
-    cache: init.cache ?? "no-store"
+    cache: init.cache ?? "no-store",
   });
 }

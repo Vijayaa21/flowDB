@@ -53,7 +53,7 @@ export class FlowDBError extends Error {
       code: this.code,
       message: this.message,
       statusCode: this.statusCode,
-      retryable: this.retryable
+      retryable: this.retryable,
     };
   }
 }
@@ -61,11 +61,7 @@ export class FlowDBError extends Error {
 /**
  * Map HTTP status codes and response bodies to FlowDB errors
  */
-export function mapHttpError(
-  statusCode: number,
-  body: string,
-  originalError?: Error
-): FlowDBError {
+export function mapHttpError(statusCode: number, body: string, originalError?: Error): FlowDBError {
   let code: ErrorCode = "INTERNAL_ERROR";
   let message = body || "Unknown error";
 
@@ -106,7 +102,7 @@ export function mapHttpError(
     code,
     message: `HTTP ${statusCode}: ${message}`,
     statusCode,
-    originalError
+    originalError,
   });
 }
 
@@ -118,6 +114,6 @@ export function mapNetworkError(error: Error): FlowDBError {
     code: "NETWORK_ERROR",
     message: `Network error: ${error.message}`,
     originalError: error,
-    retryable: true
+    retryable: true,
   });
 }

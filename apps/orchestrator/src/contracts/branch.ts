@@ -4,7 +4,7 @@ import {
   isoDateTimeSchema,
   paginationMetaSchema,
   paginationQuerySchema,
-  slugSchema
+  slugSchema,
 } from "./common";
 import { forkOperationDtoSchema } from "./operation";
 
@@ -13,7 +13,7 @@ export const branchStatusSchema = z.enum([
   "active",
   "tearing_down",
   "deleted",
-  "failed"
+  "failed",
 ]);
 
 export const branchNameSchema = z
@@ -32,41 +32,41 @@ export const branchDtoSchema = z.object({
   status: branchStatusSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
-  deletedAt: isoDateTimeSchema.nullable()
+  deletedAt: isoDateTimeSchema.nullable(),
 });
 
 export const branchScopeParamsSchema = z.object({
   organizationSlug: slugSchema,
-  projectSlug: slugSchema
+  projectSlug: slugSchema,
 });
 
 export const createBranchRequestBodySchema = z.object({
   branchName: branchNameSchema,
   sourceDatabaseUrl: z.string().url().optional(),
-  idempotencyKey: z.string().min(1)
+  idempotencyKey: z.string().min(1),
 });
 
 export const createBranchResponseSchema = z.object({
   branch: branchDtoSchema,
-  operation: forkOperationDtoSchema
+  operation: forkOperationDtoSchema,
 });
 
 export const listBranchesQuerySchema = paginationQuerySchema.extend({
-  status: branchStatusSchema.optional()
+  status: branchStatusSchema.optional(),
 });
 
 export const listBranchesResponseSchema = z.object({
   items: z.array(branchDtoSchema),
-  page: paginationMetaSchema
+  page: paginationMetaSchema,
 });
 
 export const deleteBranchParamsSchema = branchScopeParamsSchema.extend({
-  branchName: branchNameSchema
+  branchName: branchNameSchema,
 });
 
 export const deleteBranchResponseSchema = z.object({
   success: z.literal(true),
-  branchName: branchNameSchema
+  branchName: branchNameSchema,
 });
 
 export type BranchStatus = z.infer<typeof branchStatusSchema>;

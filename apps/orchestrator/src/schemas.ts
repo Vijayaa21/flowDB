@@ -2,12 +2,26 @@ import { z } from "zod";
 
 export const githubPullRequestSchema = z.object({
   action: z.enum(["opened", "reopened", "closed"]),
+  repository: z
+    .object({
+      owner: z.object({
+        login: z.string().min(1),
+      }),
+    })
+    .optional(),
   pull_request: z.object({
     number: z.number().int(),
     head: z.object({
-      ref: z.string().min(1)
-    })
-  })
+      ref: z.string().min(1),
+      repo: z
+        .object({
+          owner: z.object({
+            login: z.string().min(1),
+          }),
+        })
+        .optional(),
+    }),
+  }),
 });
 
 export const githubPushSchema = z.object({
@@ -16,10 +30,10 @@ export const githubPushSchema = z.object({
     .object({
       name: z.string().min(1),
       owner: z.object({
-        login: z.string().min(1)
-      })
+        login: z.string().min(1),
+      }),
     })
-    .optional()
+    .optional(),
 });
 
 export const vercelWebhookSchema = z.object({
@@ -30,14 +44,23 @@ export const vercelWebhookSchema = z.object({
         .object({
           id: z.string().min(1),
           target: z.string().optional(),
-          meta: z.record(z.string(), z.string()).optional()
+          meta: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
       git: z
         .object({
-          branch: z.string().optional()
+          branch: z.string().optional(),
         })
-        .optional()
+        .optional(),
     })
-    .optional()
+    .optional(),
+});
+
+export const forkBranchSchema = z.object({
+  sourceDatabaseUrl: z.string().url(),
+  branchName: z
+    .string()
+    .min(1)
+    .max(63)
+    .regex(/^[a-zA-Z0-9._\/-]+$/, "Invalid branch name format."),
 });

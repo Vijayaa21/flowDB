@@ -18,7 +18,7 @@ describe("credential manager", () => {
       apiUrl: "http://localhost:3000",
       apiKey: "test-key",
       orgSlug: "test-org",
-      projectSlug: "test-project"
+      projectSlug: "test-project",
     };
 
     credentialManager.saveCredentials(credentials);
@@ -30,7 +30,7 @@ describe("credential manager", () => {
       apiUrl: "http://localhost:3000",
       apiKey: "test-key",
       orgSlug: "test-org",
-      projectSlug: "test-project"
+      projectSlug: "test-project",
     };
 
     credentialManager.saveCredentials(credentials);
@@ -54,7 +54,7 @@ describe("orchestrator client", () => {
     apiUrl: "http://localhost:3000",
     apiKey: "test-key",
     orgSlug: "test-org",
-    projectSlug: "test-project"
+    projectSlug: "test-project",
   };
 
   it("should create client with valid config", () => {
@@ -66,7 +66,7 @@ describe("orchestrator client", () => {
     const noAuthConfig: OrchestratorConfig = {
       apiUrl: "http://localhost:3000",
       orgSlug: "test-org",
-      projectSlug: "test-project"
+      projectSlug: "test-project",
     };
 
     const client = new OrchestratorClient(noAuthConfig);
@@ -79,7 +79,7 @@ describe("orchestrator client", () => {
       FLOWDB_ORCHESTRATOR_URL: "http://localhost:3000",
       FLOWDB_API_KEY: "test-key",
       FLOWDB_ORG_SLUG: "test-org",
-      FLOWDB_PROJECT_SLUG: "test-project"
+      FLOWDB_PROJECT_SLUG: "test-project",
     } as unknown as NodeJS.ProcessEnv;
 
     const config = OrchestratorClient.fromEnv(env);
@@ -92,7 +92,7 @@ describe("orchestrator client", () => {
 
   it("should return null for incomplete env config", () => {
     const env = {
-      FLOWDB_ORCHESTRATOR_URL: "http://localhost:3000"
+      FLOWDB_ORCHESTRATOR_URL: "http://localhost:3000",
     } as unknown as NodeJS.ProcessEnv;
 
     const config = OrchestratorClient.fromEnv(env);

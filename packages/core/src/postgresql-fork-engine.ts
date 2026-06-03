@@ -4,7 +4,7 @@ import { Client, type ClientConfig } from "pg";
 import { ForkTimeoutError } from "./errors";
 import type { BranchInfo, ForkResult } from "./types";
 
-const FORK_TIMEOUT_MS = 500;
+const FORK_TIMEOUT_MS = 5000;
 
 type BranchRow = {
   name: string;
@@ -42,7 +42,7 @@ export class ForkEngine {
       branchDatabaseUrl,
       branchName,
       forkedAt,
-      durationMs
+      durationMs,
     };
   }
 
@@ -82,7 +82,7 @@ export class ForkEngine {
       return result.rows.map((row) => ({
         name: row.name,
         size: Number(row.size),
-        createdAt: new Date(row.created_at)
+        createdAt: new Date(row.created_at),
       }));
     } finally {
       await client.end();

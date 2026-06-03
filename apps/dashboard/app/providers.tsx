@@ -15,9 +15,9 @@ export function Providers({ children }: ProvidersProps) {
         defaultOptions: {
           queries: {
             staleTime: 30000,
-            retry: 2
-          }
-        }
+            retry: 2,
+          },
+        },
       })
   );
 

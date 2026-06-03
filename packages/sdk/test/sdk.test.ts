@@ -12,7 +12,7 @@ describe("FlowDB SDK", () => {
       apiKey: "test-key-12345",
       orgSlug: "test-org",
       projectSlug: "test-project",
-      timeoutMs: 5000
+      timeoutMs: 5000,
     };
   });
 
@@ -30,7 +30,7 @@ describe("FlowDB SDK", () => {
 
     it("should throw error when created from env with missing vars", () => {
       const env = {
-        FLOWDB_API_URL: "http://localhost:3000"
+        FLOWDB_API_URL: "http://localhost:3000",
         // Missing other required vars
       } as unknown as NodeJS.ProcessEnv;
 
@@ -43,7 +43,7 @@ describe("FlowDB SDK", () => {
         FLOWDB_API_KEY: "test-key",
         FLOWDB_ORG_SLUG: "test-org",
         FLOWDB_PROJECT_SLUG: "test-project",
-        FLOWDB_TIMEOUT_MS: "10000"
+        FLOWDB_TIMEOUT_MS: "10000",
       } as unknown as NodeJS.ProcessEnv;
 
       const client = FlowDBClient.fromEnv(env);
@@ -56,7 +56,7 @@ describe("FlowDB SDK", () => {
       const error = new FlowDBError({
         code: "TIMEOUT",
         message: "Request timed out",
-        retryable: true
+        retryable: true,
       });
 
       expect(error.retryable).toBe(true);
@@ -66,7 +66,7 @@ describe("FlowDB SDK", () => {
     it("should automatically mark RATE_LIMITED as retryable", () => {
       const error = new FlowDBError({
         code: "RATE_LIMITED",
-        message: "Rate limited"
+        message: "Rate limited",
       });
 
       expect(error.retryable).toBe(true);
@@ -75,7 +75,7 @@ describe("FlowDB SDK", () => {
     it("should automatically mark NOT_FOUND as non-retryable", () => {
       const error = new FlowDBError({
         code: "NOT_FOUND",
-        message: "Branch not found"
+        message: "Branch not found",
       });
 
       expect(error.retryable).toBe(false);
@@ -98,7 +98,7 @@ describe("FlowDB SDK", () => {
         maxRetries: 3,
         initialDelayMs: 1000,
         maxDelayMs: 5000,
-        backoffMultiplier: 2
+        backoffMultiplier: 2,
       };
 
       const delay10 = calculateBackoffDelay(10, options);
@@ -123,7 +123,7 @@ describe("FlowDB SDK", () => {
         FLOWDB_API_KEY: "test-key",
         FLOWDB_ORG_SLUG: "test-org",
         FLOWDB_PROJECT_SLUG: "test-project",
-        FLOWDB_TIMEOUT_MS: "15000"
+        FLOWDB_TIMEOUT_MS: "15000",
       } as unknown as NodeJS.ProcessEnv;
 
       const client = FlowDBClient.fromEnv(env);

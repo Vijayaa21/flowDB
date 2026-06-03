@@ -8,7 +8,8 @@ import { createApp } from "../src/server";
 import type { BranchStateRepository } from "../src/branch-state-repository";
 import type { BranchRecord, BranchStatus } from "../src/types";
 
-type BranchStore = Map<string, BranchRecord>;
+type ExtendedBranchRecord = BranchRecord & { prNumber?: number | null };
+type BranchStore = Map<string, ExtendedBranchRecord>;
 
 function branchKey(ownerGithubId: string, branchName: string): string {
   return `${ownerGithubId}:${branchName}`;
@@ -17,34 +18,74 @@ function branchKey(ownerGithubId: string, branchName: string): string {
 class InMemoryBranchRepository implements BranchStateRepository {
   private readonly store: BranchStore = new Map();
 
+  public async create(
+    ownerGithubId: string,
+    record: {
+      branchName: string;
+      sourceUrl: string;
+      branchUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<BranchRecord> {
+    const now = new Date();
+    const key = branchKey(ownerGithubId, record.branchName);
+    const existing = this.store.get(key);
+    const created: ExtendedBranchRecord = {
+      id: existing?.id ?? String(this.store.size + 1),
+      branchName: record.branchName,
+      sourceUrl: record.sourceUrl,
+      branchUrl: record.branchUrl,
+      status: record.status,
+      ownerGithubId,
+      createdAt: existing?.createdAt ?? now,
+      prNumber: existing?.prNumber ?? null,
+    };
+    this.store.set(key, created);
+    return created;
+  }
+
   public reset(): void {
     this.store.clear();
   }
 
-  public async upsert(ownerGithubId: string, record: {
-    prNumber: number;
-    branchName: string;
-    branchDatabaseUrl: string;
-    status: BranchStatus;
-  }): Promise<void> {
-    const now = new Date();
+  public async upsert(
+    ownerGithubId: string,
+    record: {
+      prNumber?: number | null;
+      branchName: string;
+      sourceUrl: string;
+      branchUrl: string;
+      status: BranchStatus;
+    }
+  ): Promise<void> {
+    await this.create(ownerGithubId, {
+      branchName: record.branchName,
+      sourceUrl: record.sourceUrl,
+      branchUrl: record.branchUrl,
+      status: record.status,
+    });
+
     const key = branchKey(ownerGithubId, record.branchName);
     const existing = this.store.get(key);
-    this.store.set(key, {
-      prNumber: record.prNumber,
-      branchName: record.branchName,
-      branchDatabaseUrl: record.branchDatabaseUrl,
-      status: record.status,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now
-    });
+    if (existing) {
+      this.store.set(key, {
+        ...existing,
+        prNumber: record.prNumber ?? null,
+      });
+    }
   }
 
-  public async getByBranchName(ownerGithubId: string, branchName: string): Promise<BranchRecord | null> {
+  public async getByBranchName(
+    ownerGithubId: string,
+    branchName: string
+  ): Promise<BranchRecord | null> {
     return this.store.get(branchKey(ownerGithubId, branchName)) ?? null;
   }
 
-  public async getByPrNumber(ownerGithubId: string, prNumber: number): Promise<BranchRecord | null> {
+  public async getByPrNumber(
+    ownerGithubId: string,
+    prNumber: number
+  ): Promise<BranchRecord | null> {
     for (const [key, record] of this.store.entries()) {
       if (key.startsWith(`${ownerGithubId}:`) && record.prNumber === prNumber) {
         return record;
@@ -53,18 +94,24 @@ class InMemoryBranchRepository implements BranchStateRepository {
     return null;
   }
 
-  public async setStatus(ownerGithubId: string, branchName: string, status: BranchStatus): Promise<void> {
+  public async setStatus(
+    ownerGithubId: string,
+    branchName: string,
+    status: BranchStatus
+  ): Promise<void> {
     const key = branchKey(ownerGithubId, branchName);
     const record = this.store.get(key);
     if (!record) {
       return;
     }
-    this.store.set(key, { ...record, status, updatedAt: new Date() });
+    this.store.set(key, { ...record, status });
   }
 
   public async listActive(ownerGithubId: string): Promise<BranchRecord[]> {
     return [...this.store.entries()]
-      .filter(([key, record]) => key.startsWith(`${ownerGithubId}:`) && record.status !== "closed")
+      .filter(
+        ([key, record]) => key.startsWith(`${ownerGithubId}:`) && record.status !== "TORN_DOWN"
+      )
       .map(([, record]) => record);
   }
 }
@@ -107,7 +154,7 @@ function createNodeServerFromHono(app: ReturnType<typeof createApp>) {
       const webRequest = new Request(requestUrl, {
         method: req.method,
         headers: req.headers as HeadersInit,
-        body
+        body,
       });
       const response = await app.fetch(webRequest);
       res.statusCode = response.status;
@@ -142,7 +189,7 @@ describe("orchestrator routes", () => {
           branchDatabaseUrl: `postgres://branch/${branchName}`,
           branchName,
           forkedAt: new Date(),
-          durationMs: 10
+          durationMs: 10,
         };
       },
       async teardown(branchDatabaseUrl) {
@@ -153,7 +200,7 @@ describe("orchestrator routes", () => {
       },
       async healthCheck() {
         return true;
-      }
+      },
     },
     migrationRunner: async (_projectRoot, branchDatabaseUrl) => {
       migrationRuns.push(branchDatabaseUrl);
@@ -161,17 +208,17 @@ describe("orchestrator routes", () => {
         applied: [],
         pending: [],
         schemaDiffSummary: "No migrations were applied.",
-        conflicts: []
+        conflicts: [],
       };
     },
     vercel: {
       async injectDeploymentDatabaseUrl(deploymentId, databaseUrl) {
         vercelInjects.push({ deploymentId, databaseUrl });
-      }
+      },
     },
     scheduleTask: (task) => {
       tasks.push(task());
-    }
+    },
   });
 
   const server = createNodeServerFromHono(app);
@@ -193,22 +240,33 @@ describe("orchestrator routes", () => {
   });
 
   test("GET /health echoes incoming request id", async () => {
-    const response = await request(server)
-      .get("/health")
-      .set("x-request-id", "req-health-echo-1");
+    const response = await request(server).get("/health").set("x-request-id", "req-health-echo-1");
 
     expect(response.status).toBe(200);
     expect(response.headers["x-request-id"]).toBe("req-health-echo-1");
     expect(response.body.requestId).toBe("req-health-echo-1");
   });
 
+  test("GET / returns service metadata", async () => {
+    const response = await request(server).get("/").set("x-request-id", "req-root-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.service).toBe("flowdb-orchestrator");
+    expect(response.body.status).toBe("ok");
+    expect(response.body.version).toBe("test-version");
+    expect(response.body.requestId).toBe("req-root-1");
+    expect(response.body.endpoints).toEqual({
+      health: "/health",
+      metrics: "/metrics",
+      branches: "/branches",
+    });
+  });
+
   test("GET /metrics returns baseline request metrics", async () => {
     await request(server).get("/health");
     await request(server).get("/health");
 
-    const response = await request(server)
-      .get("/metrics")
-      .set("x-request-id", "req-metrics-1");
+    const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-1");
 
     expect(response.status).toBe(200);
     expect(response.body.totalRequests).toBeGreaterThanOrEqual(3);
@@ -226,12 +284,14 @@ describe("orchestrator routes", () => {
   test("GET /metrics captures webhook and background task counters", async () => {
     const pullRequestPayload = {
       action: "opened",
-      pull_request: { number: 777, head: { ref: "feature/metrics" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 777, head: { ref: "feature/metrics" } },
     };
 
     const invalidPayload = {
       action: "opened",
-      pull_request: { number: 778, head: { ref: "feature/invalid" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 778, head: { ref: "feature/invalid" } },
     };
 
     const vercelPayload = {
@@ -241,15 +301,15 @@ describe("orchestrator routes", () => {
           id: "dep_metrics_1",
           target: "preview",
           meta: {
-            githubCommitRef: "feature/metrics"
-          }
-        }
-      }
+            githubOwner: "12345",
+            githubCommitRef: "feature/metrics",
+          },
+        },
+      },
     };
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-open-777")
       .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
@@ -257,7 +317,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-open-777")
       .set("x-hub-signature-256", signature("test-secret", pullRequestPayload))
@@ -265,7 +324,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-metrics-invalid-778")
       .set("x-hub-signature-256", "sha256=invalid")
@@ -273,7 +331,6 @@ describe("orchestrator routes", () => {
 
     await request(server)
       .post("/webhooks/vercel")
-      .set("authorization", authHeader)
       .send(vercelPayload);
 
     const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-2");
@@ -289,23 +346,25 @@ describe("orchestrator routes", () => {
     expect(response.body.backgroundTasks.scheduled).toBeGreaterThanOrEqual(2);
     expect(response.body.backgroundTasks.succeeded).toBeGreaterThanOrEqual(2);
     expect(response.body.backgroundTasks.failed).toBe(0);
-    expect(response.body.backgroundTasks.byName["github.pull_request.open_or_reopen"]).toBeGreaterThanOrEqual(
-      1
-    );
-    expect(response.body.backgroundTasks.byName["vercel.deployment.ready.preview"]).toBeGreaterThanOrEqual(1);
+    expect(
+      response.body.backgroundTasks.byName["github.pull_request.open_or_reopen"]
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      response.body.backgroundTasks.byName["vercel.deployment.ready.preview"]
+    ).toBeGreaterThanOrEqual(1);
     expect(response.body.requestId).toBe("req-metrics-2");
   });
 
   test("POST /webhooks/github validates signature and forks on pull_request.opened", async () => {
     const payload = {
       action: "opened",
-      pull_request: { number: 101, head: { ref: "feature/api" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 101, head: { ref: "feature/api" } },
     };
 
     const startedAt = Date.now();
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-open-101")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -324,18 +383,19 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 150,
       branchName: "feature/reopen",
-      branchDatabaseUrl: "postgres://branch/old-feature/reopen",
-      status: "closed"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/old-feature/reopen",
+      status: "TORN_DOWN",
     });
 
     const payload = {
       action: "reopened",
-      pull_request: { number: 150, head: { ref: "feature/reopen" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 150, head: { ref: "feature/reopen" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-reopen-150")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -345,26 +405,27 @@ describe("orchestrator routes", () => {
     expect(forkCalls).toContain("feature/reopen");
 
     const reopened = await branchRepo.getByBranchName("12345", "feature/reopen");
-    expect(reopened?.status).toBe("active");
-    expect(reopened?.branchDatabaseUrl).toBe("postgres://branch/feature/reopen");
+    expect(reopened?.status).toBe("READY");
+    expect(reopened?.branchUrl).toBe("postgres://branch/feature/reopen");
   });
 
   test("POST /webhooks/github ignores duplicate delivery for active branch", async () => {
     await branchRepo.upsert("12345", {
       prNumber: 160,
       branchName: "feature/dupe",
-      branchDatabaseUrl: "postgres://branch/feature/dupe",
-      status: "active"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/dupe",
+      status: "READY",
     });
 
     const payload = {
       action: "opened",
-      pull_request: { number: 160, head: { ref: "feature/dupe" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 160, head: { ref: "feature/dupe" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-dupe-160")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -379,14 +440,17 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 200,
       branchName: "feature/push",
-      branchDatabaseUrl: "postgres://branch/feature/push",
-      status: "active"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/push",
+      status: "READY",
     });
 
-    const payload = { ref: "refs/heads/feature/push" };
+    const payload = {
+      ref: "refs/heads/feature/push",
+      repository: { name: "flowdb", owner: { login: "12345" } },
+    };
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "push")
       .set("x-github-delivery", "del-push-200")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -400,18 +464,19 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 300,
       branchName: "feature/close",
-      branchDatabaseUrl: "postgres://branch/feature/close",
-      status: "active"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/close",
+      status: "READY",
     });
 
     const payload = {
       action: "closed",
-      pull_request: { number: 300, head: { ref: "feature/close" } }
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 300, head: { ref: "feature/close" } },
     };
 
     const response = await request(server)
       .post("/webhooks/github")
-      .set("authorization", authHeader)
       .set("x-github-event", "pull_request")
       .set("x-github-delivery", "del-close-300")
       .set("x-hub-signature-256", signature("test-secret", payload))
@@ -425,8 +490,9 @@ describe("orchestrator routes", () => {
     await branchRepo.upsert("12345", {
       prNumber: 400,
       branchName: "feature/preview",
-      branchDatabaseUrl: "postgres://branch/feature/preview",
-      status: "active"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/preview",
+      status: "READY",
     });
 
     const payload = {
@@ -436,21 +502,21 @@ describe("orchestrator routes", () => {
           id: "dep_123",
           target: "preview",
           meta: {
-            githubCommitRef: "feature/preview"
-          }
-        }
-      }
+            githubOwner: "12345",
+            githubCommitRef: "feature/preview",
+          },
+        },
+      },
     };
 
     const response = await request(server)
       .post("/webhooks/vercel")
-      .set("authorization", authHeader)
       .send(payload);
 
     expect(response.status).toBe(200);
     expect(vercelInjects).toContainEqual({
       deploymentId: "dep_123",
-      databaseUrl: "postgres://branch/feature/preview"
+      databaseUrl: "postgres://branch/feature/preview",
     });
   });
 
@@ -459,36 +525,79 @@ describe("orchestrator routes", () => {
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.body).toEqual({ error: "Unauthorized" });
 
-    const authorized = await request(server)
-      .get("/branches")
-      .set("authorization", authHeader);
+    const authorized = await request(server).get("/branches").set("authorization", authHeader);
     expect(authorized.status).toBe(200);
     expect(authorized.body).toEqual([]);
+  });
+
+  test("POST /branches/fork creates metadata record and GET /branches returns it", async () => {
+    const createResponse = await request(server)
+      .post("/branches/fork")
+      .set("authorization", authHeader)
+      .send({
+        sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
+        branchName: "feature/manual-fork",
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.branchName).toBe("feature/manual-fork");
+    expect(createResponse.body.status).toBe("READY");
+    expect(createResponse.body.ownerGithubId).toBe("12345");
+
+    const listResponse = await request(server).get("/branches").set("authorization", authHeader);
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toHaveLength(1);
+    expect(listResponse.body[0].branchName).toBe("feature/manual-fork");
+  });
+
+  test("GET /branches/:branchName returns single branch with all fields", async () => {
+    await request(server)
+      .post("/branches/fork")
+      .set("authorization", authHeader)
+      .send({
+        sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
+        branchName: "feature/single-lookup",
+      });
+
+    const response = await request(server)
+      .get("/branches/feature%2Fsingle-lookup")
+      .set("authorization", authHeader);
+
+    expect(response.status).toBe(200);
+    expect(response.body.branchName).toBe("feature/single-lookup");
+    expect(response.body).toHaveProperty("id");
+    expect(response.body).toHaveProperty("sourceUrl");
+    expect(response.body).toHaveProperty("branchUrl");
+    expect(response.body).toHaveProperty("status", "READY");
+    expect(response.body).toHaveProperty("ownerGithubId", "12345");
+    expect(response.body).toHaveProperty("createdAt");
   });
 
   test("DELETE /branches/:name tears down and closes branch", async () => {
     await branchRepo.upsert("12345", {
       prNumber: 500,
       branchName: "feature/delete",
-      branchDatabaseUrl: "postgres://branch/feature/delete",
-      status: "active"
+      sourceUrl: "postgres://source",
+      branchUrl: "postgres://branch/feature/delete",
+      status: "READY",
     });
 
     const response = await request(server)
       .delete("/branches/feature%2Fdelete")
       .set("authorization", authHeader);
 
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
     expect(teardownCalls).toContain("postgres://branch/feature/delete");
 
     const updated = await branchRepo.getByBranchName("12345", "feature/delete");
-    expect(updated?.status).toBe("closed");
+    expect(updated?.status).toBe("TORN_DOWN");
   });
 
   test("POST /webhooks/github rejects invalid signature", async () => {
     const payload = {
       action: "opened",
-      pull_request: { number: 999, head: { ref: "feature/bad-signature" } }
+      pull_request: { number: 999, head: { ref: "feature/bad-signature" } },
     };
 
     const response = await request(server)
@@ -501,32 +610,33 @@ describe("orchestrator routes", () => {
 
     expect(response.status).toBe(401);
   });
-    
-    test("POST /webhooks/github ignores replayed delivery ids", async () => {
-      const payload = {
-        action: "opened",
-        pull_request: { number: 610, head: { ref: "feature/replay" } }
-      };
-    
-      const first = await request(server)
-        .post("/webhooks/github")
-        .set("authorization", authHeader)
-        .set("x-github-event", "pull_request")
-        .set("x-github-delivery", "del-replay-610")
-        .set("x-hub-signature-256", signature("test-secret", payload))
-        .send(payload);
-    
-      const second = await request(server)
-        .post("/webhooks/github")
-        .set("authorization", authHeader)
-        .set("x-github-event", "pull_request")
-        .set("x-github-delivery", "del-replay-610")
-        .set("x-hub-signature-256", signature("test-secret", payload))
-        .send(payload);
-    
-      expect(first.status).toBe(200);
-      expect(second.status).toBe(200);
-      expect(second.body).toEqual({ accepted: true, ignored: true, reason: "duplicate_delivery" });
-      expect(forkCalls.filter((name) => name === "feature/replay")).toHaveLength(1);
-    });
+
+  test("POST /webhooks/github ignores replayed delivery ids", async () => {
+    const payload = {
+      action: "opened",
+      repository: { owner: { login: "12345" } },
+      pull_request: { number: 610, head: { ref: "feature/replay" } },
+    };
+
+    const first = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-replay-610")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    const second = await request(server)
+      .post("/webhooks/github")
+      .set("authorization", authHeader)
+      .set("x-github-event", "pull_request")
+      .set("x-github-delivery", "del-replay-610")
+      .set("x-hub-signature-256", signature("test-secret", payload))
+      .send(payload);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ accepted: true, ignored: true, reason: "duplicate_delivery" });
+    expect(forkCalls.filter((name) => name === "feature/replay")).toHaveLength(1);
+  });
 });

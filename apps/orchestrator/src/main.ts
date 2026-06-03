@@ -1,6 +1,12 @@
 import { Client } from "pg";
 
-import { assertProductionConfig, getConfig, getMissingEnvMessages, isProductionRuntime } from "./config";
+import {
+  assertProductionConfig,
+  getConfig,
+  getMissingEnvMessages,
+  isProductionRuntime,
+} from "./config";
+import { runPendingMigrations } from "./migrations";
 import { createApp } from "./server";
 
 async function canConnectToDatabase(databaseUrl: string | null): Promise<boolean> {
@@ -26,6 +32,17 @@ async function start(): Promise<void> {
     assertProductionConfig(config);
   }
 
+  const migrationDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
+  if (migrationDatabaseUrl) {
+    const applied = await runPendingMigrations({
+      databaseUrl: migrationDatabaseUrl,
+      migrationsDir: config.migrationsDir,
+    });
+    if (applied.length > 0) {
+      console.log(`[orchestrator] applied migrations: ${applied.join(", ")}`);
+    }
+  }
+
   const app = createApp();
   const missingEnv = getMissingEnvMessages();
 
@@ -47,12 +64,14 @@ async function start(): Promise<void> {
 
   bunRuntime.Bun.serve({
     port: config.port,
-    fetch: app.fetch
+    fetch: app.fetch,
   });
 
   console.log(`FlowDB Orchestrator running on http://localhost:${config.port}`);
   console.log(
-    databaseConnected ? "Database: connected" : "Database: not connected (branches will return empty)"
+    databaseConnected
+      ? "Database: connected"
+      : "Database: not connected (branches will return empty)"
   );
 }
 

@@ -7,13 +7,13 @@ export const errorCodeSchema = z.enum([
   "CONFLICT",
   "RATE_LIMITED",
   "INTERNAL_ERROR",
-  "TIMEOUT"
+  "TIMEOUT",
 ]);
 
 export const apiErrorSchema = z.object({
   code: errorCodeSchema,
   message: z.string().min(1),
-  details: z.unknown().optional()
+  details: z.unknown().optional(),
 });
 
 export const slugSchema = z
@@ -26,18 +26,18 @@ export const isoDateTimeSchema = z.string().datetime({ offset: true });
 
 export const metadataEnvelopeSchema = z.object({
   requestId: z.string().min(1),
-  timestamp: isoDateTimeSchema
+  timestamp: isoDateTimeSchema,
 });
 
 export const paginationQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(25)
+  limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 export const paginationMetaSchema = z.object({
   nextCursor: z.string().nullable(),
   limit: z.number().int().min(1).max(100),
-  total: z.number().int().nonnegative().optional()
+  total: z.number().int().nonnegative().optional(),
 });
 
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

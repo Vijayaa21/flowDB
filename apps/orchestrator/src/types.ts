@@ -1,10 +1,11 @@
-export type BranchStatus = "active" | "migrating" | "closed" | "error";
+export type BranchStatus = "READY" | "MIGRATING" | "TORN_DOWN" | "ERROR";
 
 export type BranchRecord = {
-  prNumber: number;
+  id: string;
   branchName: string;
-  branchDatabaseUrl: string;
+  sourceUrl: string;
+  branchUrl: string;
   status: BranchStatus;
+  ownerGithubId: string;
   createdAt: Date;
-  updatedAt: Date;
 };

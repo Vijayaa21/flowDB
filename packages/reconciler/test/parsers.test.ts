@@ -10,13 +10,17 @@ describe("parseMigrations", () => {
     const migrations = await parseMigrations(projectRoot);
 
     expect(migrations.length).toBe(3);
-    expect(migrations.map((migration) => migration.orm).sort()).toEqual(["drizzle", "prisma", "raw"]);
+    expect(migrations.map((migration) => migration.orm).sort()).toEqual([
+      "drizzle",
+      "prisma",
+      "raw",
+    ]);
     expect(migrations.every((migration) => migration.sql.trim().length > 0)).toBe(true);
     expect(migrations.every((migration) => migration.appliedAt instanceof Date)).toBe(true);
     expect(migrations.map((migration) => migration.filename)).toEqual([
       "drizzle/0001_add_orders.sql",
       "migrations/001_add_index.sql",
-      "prisma/migrations/202601010001_init/migration.sql"
+      "prisma/migrations/202601010001_init/migration.sql",
     ]);
   });
 });

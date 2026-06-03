@@ -10,13 +10,13 @@ type RootLayoutProps = {
 
 export const metadata = {
   title: "FlowDB Dashboard",
-  description: "Manage your database branches"
+  description: "Manage your database branches",
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className="bg-[var(--gh-canvas-subtle)] text-[var(--gh-fg-default)]">
+      <body className="bg-(--gh-canvas-subtle) text-(--gh-fg-default)">
         <Providers>
           {children}
           <Toaster position="top-right" richColors closeButton theme="system" />

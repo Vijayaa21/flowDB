@@ -8,7 +8,7 @@ function migration(id: string, sql: string): Migration {
     id,
     filename: `${id}.sql`,
     orm: "raw",
-    sql
+    sql,
   };
 }
 
@@ -22,7 +22,7 @@ describe("conflict detector", () => {
     expect(refs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ table: "users", column: "email" }),
-        expect.objectContaining({ table: "users", column: "full_name" })
+        expect.objectContaining({ table: "users", column: "full_name" }),
       ])
     );
   });

@@ -33,7 +33,7 @@ function spinnerMock(): SpinnerMock {
     },
     fail() {
       return this;
-    }
+    },
   };
 }
 
@@ -62,8 +62,14 @@ async function writeBaseFixture(cwd: string, databaseUrl: string): Promise<void>
     "CREATE TABLE users (id SERIAL PRIMARY KEY, email TEXT);\n",
     "utf8"
   );
-  await writeFile(path.join(cwd, "seed.sql"), "INSERT INTO users (email) VALUES ('seed@example.com');\n");
-  await writeFile(path.join(cwd, ".flowdb.config.json"), JSON.stringify({ orm: "raw", sourceDatabaseUrl: databaseUrl }));
+  await writeFile(
+    path.join(cwd, "seed.sql"),
+    "INSERT INTO users (email) VALUES ('seed@example.com');\n"
+  );
+  await writeFile(
+    path.join(cwd, ".flowdb.config.json"),
+    JSON.stringify({ orm: "raw", sourceDatabaseUrl: databaseUrl })
+  );
 }
 
 describeContainer("flowdb cli commands", () => {
@@ -101,15 +107,15 @@ describeContainer("flowdb cli commands", () => {
       cwd: () => cwd,
       env: {
         ...process.env,
-        DATABASE_URL: sourceDatabaseUrl
+        DATABASE_URL: sourceDatabaseUrl,
       },
       exit: () => undefined,
       forkEngine: testForkEngine,
       ui: {
         log: (message) => outputs.push(String(message)),
         error: (message) => outputs.push(String(message)),
-        spinner: () => spinnerMock() as never
-      }
+        spinner: () => spinnerMock() as never,
+      },
     });
   }
 
@@ -189,14 +195,18 @@ describeContainer("flowdb cli commands", () => {
 
     const branchClient = new Client({ connectionString: branch.branchDatabaseUrl });
     await branchClient.connect();
-    await branchClient.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT)");
+    await branchClient.query(
+      "CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT)"
+    );
     await branchClient.end();
 
     await run(["seed", branchName], cwd);
 
     const verifyClient = new Client({ connectionString: branch.branchDatabaseUrl });
     await verifyClient.connect();
-    const result = await verifyClient.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users");
+    const result = await verifyClient.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM users"
+    );
     await verifyClient.end();
     expect(result.rows[0]?.count).toBe("1");
   });

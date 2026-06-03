@@ -28,15 +28,11 @@ export class OrchestratorClient {
   private getTenantHeaders(): Record<string, string> {
     return {
       "x-org-slug": this.config.orgSlug,
-      "x-project-slug": this.config.projectSlug
+      "x-project-slug": this.config.projectSlug,
     };
   }
 
-  private async makeRequest<T>(
-    method: string,
-    endpoint: string,
-    body?: unknown
-  ): Promise<T> {
+  private async makeRequest<T>(method: string, endpoint: string, body?: unknown): Promise<T> {
     const apiUrl = this.config.apiUrl.endsWith("/")
       ? this.config.apiUrl.slice(0, -1)
       : this.config.apiUrl;
@@ -44,7 +40,7 @@ export class OrchestratorClient {
     const url = `${apiUrl}${endpoint}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...this.getTenantHeaders()
+      ...this.getTenantHeaders(),
     };
 
     if (this.config.apiKey) {
@@ -58,7 +54,7 @@ export class OrchestratorClient {
     const response = await fetch(url, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined
+      body: body ? JSON.stringify(body) : undefined,
     });
 
     if (!response.ok) {
@@ -98,7 +94,7 @@ export class OrchestratorClient {
     const url = `${apiUrl}/branches?${params.toString()}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...this.getTenantHeaders()
+      ...this.getTenantHeaders(),
     };
 
     if (this.config.apiKey) {
@@ -126,7 +122,7 @@ export class OrchestratorClient {
     return this.makeRequest<CreateBranchResponse>("POST", "/branches", {
       branchName,
       idempotencyKey,
-      sourceDatabaseUrl
+      sourceDatabaseUrl,
     });
   }
 
@@ -150,7 +146,7 @@ export class OrchestratorClient {
       apiKey,
       jwtToken,
       orgSlug,
-      projectSlug
+      projectSlug,
     };
   }
 }
