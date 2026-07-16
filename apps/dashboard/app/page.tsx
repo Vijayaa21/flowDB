@@ -455,8 +455,248 @@ function GithubAppGuide() {
   );
 }
 
+function LoadingScreen() {
+  return (
+    <main
+      className="min-h-screen px-4 py-6 text-(--gh-fg-default) sm:px-6 lg:px-8"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle_at_top_left,rgba(9,105,218,0.14),transparent_32%),linear-gradient(180deg,#f6f8fa_0%,#eef2f7_100%)",
+      }}
+    >
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center rounded-3xl border border-(--gh-border-default) bg-white/80 p-8 text-center shadow-[0_20px_80px_rgba(36,41,47,0.08)] backdrop-blur dark:bg-(--gh-canvas-default)/90">
+        <div>
+          <div className="mx-auto h-12 w-12 animate-pulse rounded-2xl bg-(--gh-accent-emphasis)/15" />
+          <p className="mt-4 text-sm text-(--gh-fg-muted)">Loading your FlowDB workspace</p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function PublicLanding({ onSignIn }: { onSignIn: () => void }) {
+  return (
+    <main
+      className="min-h-screen px-4 py-6 text-(--gh-fg-default) sm:px-6 lg:px-8"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle_at_top_left,rgba(9,105,218,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(46,129,247,0.12),transparent_24%),linear-gradient(180deg,#f6f8fa_0%,#eef2f7_100%)",
+      }}
+    >
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <header className="flex flex-col gap-4 rounded-3xl border border-(--gh-border-default) bg-white/80 px-5 py-4 shadow-[0_20px_80px_rgba(36,41,47,0.08)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-(--gh-fg-muted)">
+              FlowDB
+            </p>
+            <h1 className="mt-1 text-lg font-semibold text-(--gh-fg-default)">
+              Database branching made understandable for new users
+            </h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="rounded-xl bg-(--gh-accent-emphasis) px-4 py-2 text-sm font-medium text-white hover:brightness-110"
+            >
+              Continue with GitHub
+            </button>
+            <a
+              href="/signup"
+              className="rounded-xl border border-(--gh-border-default) bg-white px-4 py-2 text-sm font-medium text-(--gh-fg-default) hover:bg-(--gh-canvas-subtle)"
+            >
+              See signup flow
+            </a>
+          </div>
+        </header>
+
+        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-3xl border border-(--gh-border-default) bg-white/85 p-6 shadow-[0_20px_80px_rgba(36,41,47,0.08)] backdrop-blur sm:p-8">
+            <span className="inline-flex rounded-full border border-(--gh-border-default) px-3 py-1 text-xs font-medium text-(--gh-fg-muted)">
+              New user path
+            </span>
+            <h2 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight text-(--gh-fg-default) sm:text-5xl">
+              Sign in, configure one source database, and create your first branch.
+            </h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-(--gh-fg-muted) sm:text-lg">
+              FlowDB is designed around a simple first-run story: authenticate with GitHub, point
+              the dashboard at the orchestrator, and fork a PostgreSQL database into an isolated
+              branch for preview work.
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="rounded-xl bg-(--gh-accent-emphasis) px-5 py-3 text-sm font-medium text-white hover:brightness-110"
+              >
+                Start with GitHub
+              </button>
+              <a
+                href="#how-it-works"
+                className="rounded-xl border border-(--gh-border-default) bg-white px-5 py-3 text-sm font-medium text-(--gh-fg-default) hover:bg-(--gh-canvas-subtle)"
+              >
+                See how it works
+              </a>
+            </div>
+
+            <div className="mt-8 grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  title: "1. Sign in",
+                  text: "Use GitHub OAuth to create a FlowDB session.",
+                },
+                {
+                  title: "2. Configure",
+                  text: "Set the orchestrator URL and source database details.",
+                },
+                {
+                  title: "3. Branch",
+                  text: "Create isolated PostgreSQL branches for preview work.",
+                },
+              ].map((step) => (
+                <article
+                  key={step.title}
+                  className="rounded-2xl border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-4"
+                >
+                  <p className="text-sm font-semibold text-(--gh-fg-default)">{step.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-(--gh-fg-muted)">{step.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <section className="rounded-3xl border border-(--gh-border-default) bg-white/85 p-6 shadow-[0_20px_80px_rgba(36,41,47,0.08)] backdrop-blur">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-(--gh-fg-muted)">
+                What FlowDB does
+              </h3>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-(--gh-fg-muted)">
+                <p>Creates temporary database branches that behave like isolated preview copies.</p>
+                <p>Routes user actions through a dashboard and a protected orchestrator API.</p>
+                <p>Uses GitHub as the identity provider, so there is no password setup overhead.</p>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-(--gh-border-default) bg-white/85 p-6 shadow-[0_20px_80px_rgba(36,41,47,0.08)] backdrop-blur" id="how-it-works">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-(--gh-fg-muted)">
+                What you need to run it
+              </h3>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-(--gh-fg-muted)">
+                <li>Bun and Docker for local development.</li>
+                <li>A GitHub OAuth App for real login and signup.</li>
+                <li>A PostgreSQL source database for branch creation.</li>
+                <li>An orchestrator URL and auth secret for the dashboard.</li>
+              </ul>
+              <a
+                href="/docs/GETTING_STARTED.md"
+                className="mt-5 inline-flex rounded-xl border border-(--gh-border-default) px-4 py-2 text-sm font-medium text-(--gh-fg-default) hover:bg-(--gh-canvas-subtle)"
+              >
+                Read the run guide
+              </a>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function WorkspaceOrientation({
+  steps,
+  isSignedIn,
+  onSignIn,
+  onOpenSetup,
+  onOpenBranches,
+}: {
+  steps: SetupStep[];
+  isSignedIn: boolean;
+  onSignIn: () => void;
+  onOpenSetup: () => void;
+  onOpenBranches: () => void;
+}) {
+  const nextStep = steps.find((step) => !step.isDone);
+
+  return (
+    <section
+      className="mb-6 rounded-3xl border border-(--gh-border-default) p-5 text-white shadow-[0_20px_80px_rgba(15,23,42,0.28)] sm:p-6"
+      style={{ backgroundImage: "linear-gradient(135deg,#0f172a_0%,#1d4ed8_100%)" }}
+    >
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+            New user orientation
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">
+            Follow one clear path from setup to your first branch.
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 sm:text-base">
+            FlowDB is easier to understand when the product shows a single next step instead of
+            every tool at once. Start with GitHub sign in, finish the setup wizard, then create
+            your first branch.
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            {!isSignedIn ? (
+              <button
+                type="button"
+                onClick={onSignIn}
+                className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-100"
+              >
+                Sign in with GitHub
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onOpenSetup}
+              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+            >
+              Open setup wizard
+            </button>
+            <button
+              type="button"
+              onClick={onOpenBranches}
+              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+            >
+              Open branches
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          {steps.map((step) => (
+            <article
+              key={step.key}
+              className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">{step.label}</p>
+                  <p className="mt-1 text-sm leading-6 text-white/70">{step.description}</p>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                    step.isDone ? "bg-emerald-400/20 text-emerald-100" : "bg-white/10 text-white/70"
+                  }`}
+                >
+                  {step.isDone ? "Done" : "Next"}
+                </span>
+              </div>
+            </article>
+          ))}
+          {nextStep ? (
+            <p className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm text-white/80">
+              Next up: {nextStep.label}. {isSignedIn ? "Open the setup wizard to finish it." : "Sign in to continue."}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function HomePage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const hasFlowDbToken = Boolean(session?.token);
   const isSignedIn = Boolean(session?.user);
   const [config, setConfig] = useState<DashboardConfig>(() => readDashboardConfig());
@@ -539,6 +779,7 @@ export default function HomePage() {
     },
   ];
   const setupCompletedCount = setupSteps.filter((step) => step.isDone).length;
+  const firstIncompleteStep = setupSteps.find((step) => !step.isDone) ?? null;
   const stats = useMemo(() => {
     const totalBranches = branches.length;
     const activeMigrations = branches.filter(
@@ -664,8 +905,22 @@ export default function HomePage() {
     void signIn("github", { callbackUrl: "/" });
   };
 
+  if (status === "loading") {
+    return <LoadingScreen />;
+  }
+
+  if (!isSignedIn) {
+    return <PublicLanding onSignIn={handleSignIn} />;
+  }
+
   return (
-    <div className="min-h-screen bg-(--gh-canvas-subtle) text-(--gh-fg-default)">
+    <div
+      className="min-h-screen text-(--gh-fg-default)"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle_at_top_left,rgba(9,105,218,0.08),transparent_28%),linear-gradient(180deg,#f6f8fa_0%,#eef2f7_100%)",
+      }}
+    >
       <div className="mx-auto flex w-full max-w-7xl">
         <aside className="hidden h-screen border-r border-(--gh-border-default) bg-(--gh-canvas-default) md:flex md:w-16 md:flex-col md:items-center md:py-6 lg:w-64 lg:items-stretch">
           <div className="mb-8 px-2 text-center text-sm font-semibold uppercase tracking-[0.18em] text-(--gh-fg-muted) lg:px-6 lg:text-left">
@@ -803,6 +1058,14 @@ export default function HomePage() {
         </aside>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <WorkspaceOrientation
+            steps={setupSteps}
+            isSignedIn={isSignedIn}
+            onSignIn={handleSignIn}
+            onOpenSetup={() => setActiveSection("setup")}
+            onOpenBranches={() => setActiveSection("branches")}
+          />
+
           <header className="mb-6 rounded-2xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -829,6 +1092,35 @@ export default function HomePage() {
                 </button>
               </div>
             </div>
+            {firstIncompleteStep ? (
+              <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                <p className="font-medium">Finish setup to unlock branch creation.</p>
+                <p className="mt-1 text-amber-800 dark:text-amber-200">
+                  Next step: {firstIncompleteStep.label}.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("setup")}
+                  className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500"
+                >
+                  Continue setup
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                <p className="font-medium">Your workspace is ready.</p>
+                <p className="mt-1 text-emerald-800 dark:text-emerald-200">
+                  You can create branches and monitor health from the branches tab.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection("branches")}
+                  className="mt-3 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                >
+                  Go to branches
+                </button>
+              </div>
+            )}
           </header>
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

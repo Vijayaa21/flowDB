@@ -9,7 +9,7 @@ COPY packages ./packages
 COPY apps/orchestrator ./apps/orchestrator
 
 # Install workspace dependencies (includes @flowdb/* packages)
-RUN bun install --frozen-lockfile
+RUN bun install
 
 WORKDIR /repo/apps/orchestrator
 
