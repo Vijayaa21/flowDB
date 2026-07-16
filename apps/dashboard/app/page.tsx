@@ -163,7 +163,8 @@ function BranchCreateForm({
       </form>
 
       <p className="mt-3 text-xs text-(--gh-fg-muted)">
-        The dashboard sends this request to the orchestrator at <span className="font-medium">POST /branches/fork</span>.
+        The dashboard sends this request to the orchestrator at{" "}
+        <span className="font-medium">POST /branches/fork</span>.
       </p>
     </section>
   );
@@ -318,7 +319,9 @@ function SetupWizard({
 
       {!isSignedIn ? (
         <div className="mt-4 rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
-          <p className="text-sm text-(--gh-fg-muted)">Sign in with GitHub to unlock branch actions.</p>
+          <p className="text-sm text-(--gh-fg-muted)">
+            Sign in with GitHub to unlock branch actions.
+          </p>
           <button
             type="button"
             onClick={onSignIn}
@@ -398,25 +401,39 @@ function SetupWizard({
 function GithubAppGuide() {
   return (
     <section className="mt-6 rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-5">
-      <h2 className="m-0 text-base font-medium text-(--gh-fg-default)">GitHub App Integration Guide</h2>
+      <h2 className="m-0 text-base font-medium text-(--gh-fg-default)">
+        GitHub App Integration Guide
+      </h2>
       <p className="mt-2 text-sm text-(--gh-fg-muted)">
-        Connect FlowDB to your repository so pull requests can create and teardown database branches automatically.
+        Connect FlowDB to your repository so pull requests can create and teardown database branches
+        automatically.
       </p>
 
       <div className="mt-4 space-y-3 text-sm text-(--gh-fg-muted)">
         <div className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
-          <p className="font-medium text-(--gh-fg-default)">1. Register the GitHub App from manifest</p>
-          <p className="mt-1">Open the org app creation page and paste the manifest from integrations/github-app/app.yml.</p>
-          <p className="mt-1 font-mono text-xs">https://github.com/organizations/&lt;org&gt;/settings/apps/new?state=flowdb</p>
+          <p className="font-medium text-(--gh-fg-default)">
+            1. Register the GitHub App from manifest
+          </p>
+          <p className="mt-1">
+            Open the org app creation page and paste the manifest from
+            integrations/github-app/app.yml.
+          </p>
+          <p className="mt-1 font-mono text-xs">
+            https://github.com/organizations/&lt;org&gt;/settings/apps/new?state=flowdb
+          </p>
         </div>
 
         <div className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
           <p className="font-medium text-(--gh-fg-default)">2. Capture generated credentials</p>
-          <p className="mt-1">Save App ID, Client ID, Client Secret, Webhook Secret, and Private Key securely.</p>
+          <p className="mt-1">
+            Save App ID, Client ID, Client Secret, Webhook Secret, and Private Key securely.
+          </p>
         </div>
 
         <div className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
-          <p className="font-medium text-(--gh-fg-default)">3. Configure orchestrator environment</p>
+          <p className="font-medium text-(--gh-fg-default)">
+            3. Configure orchestrator environment
+          </p>
           <ul className="mt-2 list-disc pl-5 text-xs">
             <li>GITHUB_WEBHOOK_SECRET</li>
             <li>GITHUB_TOKEN (installation token)</li>
@@ -426,8 +443,12 @@ function GithubAppGuide() {
 
         <div className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
           <p className="font-medium text-(--gh-fg-default)">4. Install and validate</p>
-          <p className="mt-1">Install the app on your repo, then confirm webhook deliveries reach /webhooks/github.</p>
-          <p className="mt-1">Open a PR to trigger branch creation and close it to trigger teardown.</p>
+          <p className="mt-1">
+            Install the app on your repo, then confirm webhook deliveries reach /webhooks/github.
+          </p>
+          <p className="mt-1">
+            Open a PR to trigger branch creation and close it to trigger teardown.
+          </p>
         </div>
       </div>
     </section>

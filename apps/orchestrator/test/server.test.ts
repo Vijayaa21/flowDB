@@ -329,9 +329,7 @@ describe("orchestrator routes", () => {
       .set("x-hub-signature-256", "sha256=invalid")
       .send(invalidPayload);
 
-    await request(server)
-      .post("/webhooks/vercel")
-      .send(vercelPayload);
+    await request(server).post("/webhooks/vercel").send(vercelPayload);
 
     const response = await request(server).get("/metrics").set("x-request-id", "req-metrics-2");
 
@@ -509,9 +507,7 @@ describe("orchestrator routes", () => {
       },
     };
 
-    const response = await request(server)
-      .post("/webhooks/vercel")
-      .send(payload);
+    const response = await request(server).post("/webhooks/vercel").send(payload);
 
     expect(response.status).toBe(200);
     expect(vercelInjects).toContainEqual({
@@ -551,13 +547,10 @@ describe("orchestrator routes", () => {
   });
 
   test("GET /branches/:branchName returns single branch with all fields", async () => {
-    await request(server)
-      .post("/branches/fork")
-      .set("authorization", authHeader)
-      .send({
-        sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
-        branchName: "feature/single-lookup",
-      });
+    await request(server).post("/branches/fork").set("authorization", authHeader).send({
+      sourceDatabaseUrl: "postgres://postgres:postgres@localhost:5432/source_db",
+      branchName: "feature/single-lookup",
+    });
 
     const response = await request(server)
       .get("/branches/feature%2Fsingle-lookup")

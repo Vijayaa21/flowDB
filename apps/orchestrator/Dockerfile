@@ -4,11 +4,12 @@ WORKDIR /repo
 
 # Copy repo-level package files and workspace sources so workspace deps resolve
 COPY package.json ./
+COPY bun.lock ./
 COPY packages ./packages
 COPY apps/orchestrator ./apps/orchestrator
 
 # Install workspace dependencies (includes @flowdb/* packages)
-RUN bun install --no-save
+RUN bun install --frozen-lockfile
 
 WORKDIR /repo/apps/orchestrator
 

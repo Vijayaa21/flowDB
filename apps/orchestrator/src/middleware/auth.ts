@@ -7,6 +7,26 @@ type JwtPayload = {
   exp?: number;
 };
 
+function readApiKeys(): Set<string> {
+  const values = [process.env.FLOWDB_API_KEY, process.env.FLOWDB_API_KEYS]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return new Set(values);
+}
+
+function readApiKey(header: string | undefined, explicitHeader: string | undefined): string | null {
+  if (explicitHeader?.trim()) {
+    return explicitHeader.trim();
+  }
+  if (!header?.startsWith("Api-Key ")) {
+    return null;
+  }
+  return header.slice("Api-Key ".length).trim();
+}
+
 function base64UrlDecode(input: string): string {
   const padded = input
     .replace(/-/g, "+")
@@ -54,12 +74,22 @@ function verifyJwt(token: string, secret: string): JwtPayload | null {
 
 export const authMiddleware: MiddlewareHandler<{
   Variables: { githubId: string; requestId: string };
-}> = async (
-  c,
-  next
-) => {
+}> = async (c, next) => {
   const header = c.req.header("authorization");
   const secret = process.env.AUTH_SECRET;
+  const apiKey = readApiKey(header, c.req.header("x-api-key"));
+  const allowedApiKeys = readApiKeys();
+
+  if (apiKey && allowedApiKeys.has(apiKey)) {
+    const apiPrincipal =
+      c.req.header("x-flowdb-github-id") ??
+      c.req.header("x-org-slug") ??
+      process.env.FLOWDB_API_KEY_OWNER ??
+      "api";
+    c.set("githubId", apiPrincipal);
+    await next();
+    return;
+  }
 
   if (!header?.startsWith("Bearer ") || !secret) {
     return c.json({ error: "Unauthorized" }, 401);
