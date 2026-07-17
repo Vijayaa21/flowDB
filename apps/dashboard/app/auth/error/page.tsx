@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 
-import LoginPageClient from "./login-page-client";
+import AuthErrorPageClient from "./auth-error-page-client";
 
-export default function LoginPage() {
+export default function AuthErrorPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
-      <LoginPageClient />
+      <AuthErrorPageClient />
     </Suspense>
   );
 }

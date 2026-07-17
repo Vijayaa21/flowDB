@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 
 import {
@@ -13,6 +13,7 @@ import {
   type Branch,
   type DashboardConfig,
 } from "../lib/api";
+import { beginGithubSignIn, beginGithubSignOut } from "../lib/auth-flow";
 import { queryKeys } from "../lib/query-keys";
 
 type SectionKey = "branches" | "settings" | "setup" | "guide";
@@ -902,7 +903,11 @@ export default function HomePage() {
   };
 
   const handleSignIn = () => {
-    void signIn("github", { callbackUrl: "/" });
+    void beginGithubSignIn("/");
+  };
+
+  const handleSignOut = () => {
+    void beginGithubSignOut("/login?signedOut=1");
   };
 
   if (status === "loading") {
@@ -1034,7 +1039,7 @@ export default function HomePage() {
             {isSignedIn ? (
               <button
                 type="button"
-                onClick={() => void signOut({ callbackUrl: "/login" })}
+                onClick={handleSignOut}
                 className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--gh-fg-muted) hover:bg-(--gh-canvas-subtle) hover:text-(--gh-fg-default)"
               >
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-(--gh-border-default) text-xs">

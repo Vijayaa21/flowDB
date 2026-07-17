@@ -47,6 +47,18 @@ function resolveSecretOrThrow(name: string, value: string | undefined, fallback:
   return fallback;
 }
 
+function normalizeRedirectUrl(url: string, baseUrl: string): string {
+  try {
+    const target = new URL(url, baseUrl);
+    if (target.origin !== baseUrl) {
+      return baseUrl;
+    }
+    return `${target.pathname}${target.search}${target.hash}` || baseUrl;
+  } catch {
+    return baseUrl;
+  }
+}
+
 const resolvedClientId = resolveSecretOrThrow("GITHUB_CLIENT_ID", githubClientId, fallbackClientId);
 const resolvedClientSecret = resolveSecretOrThrow(
   "GITHUB_CLIENT_SECRET",
@@ -104,10 +116,16 @@ const authConfig: NextAuthConfig = {
     GitHub({
       clientId: resolvedClientId,
       clientSecret: resolvedClientSecret,
+      authorization: {
+        params: {
+          scope: "read:user user:email",
+        },
+      },
     }),
   ],
   pages: {
     signIn: "/login",
+    error: "/auth/error",
   },
   callbacks: {
     async jwt({ token, account }) {
@@ -125,6 +143,9 @@ const authConfig: NextAuthConfig = {
       }
       session.token = typeof token.flowdbToken === "string" ? token.flowdbToken : undefined;
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      return normalizeRedirectUrl(url, baseUrl);
     },
   },
 };

@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "dashboard-dev",
+			"type": "shell",
+			"command": "bun.exe",
+			"args": [
+				"run",
+				"--cwd",
+				"apps/dashboard",
+				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "orchestrator-dev",
+			"type": "shell",
+			"command": "bun.exe",
+			"args": [
+				"run",
+				"--cwd",
+				"apps/orchestrator",
+				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
