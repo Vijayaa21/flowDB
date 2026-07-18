@@ -709,6 +709,10 @@ export default function HomePage() {
   const [creatingBranch, setCreatingBranch] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
   const [newSourceDatabaseUrl, setNewSourceDatabaseUrl] = useState("");
+  const [createdBranch, setCreatedBranch] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
 
   const branchesQuery = useQuery({
     queryKey: queryKeys.branches(config),
@@ -890,7 +894,11 @@ export default function HomePage() {
 
     setCreatingBranch(true);
     try {
-      await api.branches.create({ branchName, sourceDatabaseUrl }, config);
+      const created = await api.branches.create({ branchName, sourceDatabaseUrl }, config);
+      setCreatedBranch({
+        name: created.branchName,
+        url: created.branchUrl,
+      });
       toast.success(`Branch ${branchName} created.`);
       setNewBranchName("");
       await branchesQuery.refetch();
@@ -908,6 +916,18 @@ export default function HomePage() {
 
   const handleSignOut = () => {
     void beginGithubSignOut("/login?signedOut=1");
+  };
+
+  const handleCopyBranchUrl = async (branchUrl: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable.");
+      }
+      await navigator.clipboard.writeText(branchUrl);
+      toast.success("Branch URL copied to clipboard.");
+    } catch {
+      toast.error("Could not copy the branch URL. Select it manually.");
+    }
   };
 
   if (status === "loading") {
@@ -1163,6 +1183,24 @@ export default function HomePage() {
             />
           ) : activeSection === "branches" ? (
             <section className="mt-6 space-y-6">
+              {createdBranch ? (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                  <p className="font-medium">Branch created: {createdBranch.name}</p>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="break-all font-mono text-xs text-emerald-800 dark:text-emerald-200">
+                      {createdBranch.url}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyBranchUrl(createdBranch.url)}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <BranchCreateForm
                 requiresAuth={!hasFlowDbToken}
                 creating={creatingBranch}
