@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { randomUUID } from "node:crypto";
 
@@ -24,6 +24,7 @@ import { verifyGithubSignature } from "./security";
 import { VercelSdkClient, type VercelClient } from "./vercel-client";
 import { getConfig } from "./config";
 import { authMiddleware } from "./middleware/auth";
+import type { BranchRecord } from "./types";
 
 type ForkEngine = {
   fork(sourceDatabaseUrl: string, branchName: string): Promise<ForkResult>;
@@ -31,6 +32,9 @@ type ForkEngine = {
   listBranches(hostUrl: string): Promise<BranchInfo[]>;
   healthCheck(databaseUrl: string): Promise<boolean>;
 };
+
+type AppVariables = { githubId: string; requestId: string };
+type AppContext = Context<{ Variables: AppVariables }>;
 
 type WebhookReplayCache = {
   has(deliveryId: string): boolean;
@@ -224,6 +228,82 @@ function toBranchName(ref: string): string {
   return ref.replace(/^refs\/heads\//, "");
 }
 
+function toIsoDate(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function statusToContract(status: BranchRecord["status"]) {
+  switch (status) {
+    case "READY":
+      return "active";
+    case "MIGRATING":
+      return "creating";
+    case "TORN_DOWN":
+      return "deleted";
+    case "ERROR":
+      return "failed";
+  }
+}
+
+function databaseNameFromUrl(databaseUrl: string): string {
+  try {
+    return decodeURIComponent(new URL(databaseUrl).pathname.replace(/^\//, ""));
+  } catch {
+    return "";
+  }
+}
+
+function branchRecordToDto(record: BranchRecord) {
+  const createdAt = toIsoDate(record.createdAt);
+
+  return {
+    id: record.id,
+    projectId: record.ownerGithubId,
+    name: record.branchName,
+    branchName: record.branchName,
+    databaseName: databaseNameFromUrl(record.branchUrl),
+    databaseUrl: record.branchUrl,
+    sourceDatabaseName: databaseNameFromUrl(record.sourceUrl),
+    status: statusToContract(record.status),
+    rawStatus: record.status,
+    createdAt,
+    updatedAt: createdAt,
+    deletedAt: record.status === "TORN_DOWN" ? createdAt : null,
+  };
+}
+
+function createOperationDto(record: BranchRecord, idempotencyKey: string | undefined) {
+  const createdAt = toIsoDate(record.createdAt);
+
+  return {
+    id: idempotencyKey ?? `fork-${record.id}`,
+    projectId: record.ownerGithubId,
+    branchId: record.id,
+    idempotencyKey: idempotencyKey ?? `fork-${record.id}`,
+    requestedBy: record.ownerGithubId,
+    status: record.status === "ERROR" ? "failed" : "succeeded",
+    startedAt: createdAt,
+    completedAt: createdAt,
+    durationMs: null,
+    error: null,
+  };
+}
+
+function shouldReturnBranchEnvelope(c: {
+  req: {
+    query: (name: string) => string | undefined;
+    header: (name: string) => string | undefined;
+  };
+}): boolean {
+  return Boolean(
+    c.req.query("limit") ||
+    c.req.query("cursor") ||
+    c.req.query("status") ||
+    c.req.header("x-org-slug") ||
+    c.req.header("x-project-slug")
+  );
+}
+
 function parseJsonSafely<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -233,7 +313,7 @@ function parseJsonSafely<T>(raw: string): T | null {
 }
 
 export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono<{
-  Variables: { githubId: string; requestId: string };
+  Variables: AppVariables;
 }> {
   const defaults = partialDeps ? undefined : createDefaultDependencies();
   const deps: OrchestratorDependencies = {
@@ -259,12 +339,16 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     ...partialDeps,
   } as OrchestratorDependencies;
 
-  const app = new Hono<{ Variables: { githubId: string; requestId: string } }>();
+  const app = new Hono<{ Variables: AppVariables }>();
   const metrics = createRequestMetrics();
   const webhookMetrics = createWebhookMetrics();
   const backgroundTaskMetrics = createBackgroundTaskMetrics();
 
-  const runBackgroundTask = (name: string, task: () => Promise<void>, maxRetries: number = 3): void => {
+  const runBackgroundTask = (
+    name: string,
+    task: () => Promise<void>,
+    maxRetries: number = 3
+  ): void => {
     backgroundTaskMetrics.scheduled += 1;
     incrementCounter(backgroundTaskMetrics.byName, name);
 
@@ -451,7 +535,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     return authMiddleware(c, next);
   });
 
-  app.post("/branches/fork", async (c) => {
+  async function createBranch(c: AppContext, envelope: boolean) {
     const githubId = c.get("githubId") as string;
     const payload = await c.req.json();
     const parsed = forkBranchSchema.safeParse(payload);
@@ -466,7 +550,7 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       );
     }
 
-    const { sourceDatabaseUrl, branchName } = parsed.data;
+    const { sourceDatabaseUrl, branchName, idempotencyKey } = parsed.data;
     const forkResult = await deps.forkEngine.fork(sourceDatabaseUrl, branchName);
     const saved = await deps.branches.create(githubId, {
       branchName,
@@ -475,12 +559,45 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
       status: "READY",
     });
 
+    if (envelope) {
+      return c.json(
+        {
+          branch: branchRecordToDto(saved),
+          operation: createOperationDto(saved, idempotencyKey),
+        },
+        201
+      );
+    }
+
     return c.json(saved, 201);
+  }
+
+  app.post("/branches", async (c) => {
+    return createBranch(c, true);
+  });
+
+  app.post("/branches/fork", async (c) => {
+    return createBranch(c, false);
   });
 
   app.get("/branches", async (c) => {
     const githubId = c.get("githubId") as string;
     const branches = await deps.branches.listActive(githubId);
+    if (shouldReturnBranchEnvelope(c)) {
+      const limit = Number(c.req.query("limit") ?? "25");
+      const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 25;
+      const items = branches.slice(0, safeLimit).map(branchRecordToDto);
+      return c.json(
+        {
+          items,
+          page: {
+            limit: safeLimit,
+            total: branches.length,
+          },
+        },
+        200
+      );
+    }
     return c.json(branches, 200);
   });
 

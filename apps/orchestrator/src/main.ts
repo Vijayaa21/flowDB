@@ -14,7 +14,7 @@ async function canConnectToDatabase(databaseUrl: string | null): Promise<boolean
     return false;
   }
 
-  const client = new Client({ connectionString: databaseUrl });
+  const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 2000 });
   try {
     await client.connect();
     await client.query("SELECT 1");
@@ -34,12 +34,19 @@ async function start(): Promise<void> {
 
   const migrationDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
   if (migrationDatabaseUrl) {
-    const applied = await runPendingMigrations({
-      databaseUrl: migrationDatabaseUrl,
-      migrationsDir: config.migrationsDir,
-    });
-    if (applied.length > 0) {
-      console.log(`[orchestrator] applied migrations: ${applied.join(", ")}`);
+    try {
+      const applied = await runPendingMigrations({
+        databaseUrl: migrationDatabaseUrl,
+        migrationsDir: config.migrationsDir,
+      });
+      if (applied.length > 0) {
+        console.log(`[orchestrator] applied migrations: ${applied.join(", ")}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[orchestrator] skipping migration bootstrap because the database is unavailable: ${message}`
+      );
     }
   }
 

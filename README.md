@@ -4,6 +4,8 @@ The current scaffold focuses on workspace structure and shared developer tooling
 
 ## Production Readiness Docs
 
+- Getting Started Guide: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)
+- Project Status and 4-Week Plan: [docs/PROJECT_STATUS_AND_4_WEEK_PLAN.md](docs/PROJECT_STATUS_AND_4_WEEK_PLAN.md)
 - Step 10: [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)
 - Step 11 Launch Checklist: [docs/PRODUCTION_LAUNCH_CHECKLIST.md](docs/PRODUCTION_LAUNCH_CHECKLIST.md)
 - Feature Flags: [docs/FEATURE_FLAG_PLAYBOOK.md](docs/FEATURE_FLAG_PLAYBOOK.md)

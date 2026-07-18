@@ -3,7 +3,7 @@
 import { getSession } from "next-auth/react";
 
 const DEFAULT_ORCHESTRATOR_URL =
-  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3001";
+  process.env.NEXT_PUBLIC_ORCHESTRATOR_URL ?? "http://localhost:3000";
 const DEFAULT_ORG_SLUG = process.env.NEXT_PUBLIC_FLOWDB_ORG_SLUG ?? "";
 const DEFAULT_PROJECT_SLUG = process.env.NEXT_PUBLIC_FLOWDB_PROJECT_SLUG ?? "";
 const DEFAULT_ENVIRONMENT = process.env.NEXT_PUBLIC_FLOWDB_ENVIRONMENT ?? "local";

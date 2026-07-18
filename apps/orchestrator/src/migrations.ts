@@ -15,7 +15,10 @@ type RunPendingMigrationsInput = {
 
 export async function runPendingMigrations(input: RunPendingMigrationsInput): Promise<string[]> {
   const migrationFiles = await listMigrationFiles(input.migrationsDir);
-  const client = new Client({ connectionString: input.databaseUrl });
+  const client = new Client({
+    connectionString: input.databaseUrl,
+    connectionTimeoutMillis: 2000,
+  });
   await client.connect();
 
   try {

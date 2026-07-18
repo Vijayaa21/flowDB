@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +6,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: flowdb
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -21,10 +20,12 @@ services:
       SOURCE_DATABASE_URL: postgres://postgres:postgres@postgres:5432/flowdb
       AUTH_SECRET: development-secret
       GITHUB_WEBHOOK_SECRET: dev-webhook-secret
+      FLOWDB_API_KEY: dev-api-key
+      FLOWDB_API_KEY_OWNER: local
     depends_on:
       - postgres
     ports:
-      - '3000:3000'
+      - "3000:3000"
 
   dashboard:
     build:
@@ -32,10 +33,18 @@ services:
       dockerfile: apps/dashboard/Dockerfile
     environment:
       NEXTAUTH_URL: http://localhost:3001
+      AUTH_SECRET: development-secret
+      GITHUB_CLIENT_ID: dummy
+      GITHUB_CLIENT_SECRET: dummy
+      NEXT_PUBLIC_ORCHESTRATOR_URL: http://localhost:3000
+      NEXT_PUBLIC_FLOWDB_ENVIRONMENT: local
+      NEXT_PUBLIC_FLOWDB_ORG_SLUG: local
+      NEXT_PUBLIC_FLOWDB_PROJECT_SLUG: flowdb
+      NEXT_PUBLIC_FLOWDB_SOURCE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/flowdb
     depends_on:
       - orchestrator
     ports:
-      - '3001:3001'
+      - "3001:3001"
 
 volumes:
   pgdata:

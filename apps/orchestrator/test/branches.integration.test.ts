@@ -106,56 +106,52 @@ describe("branches fork integration", () => {
     await container.stop();
   }, 180000);
 
-  test(
-    "POST /branches/fork creates real branch DB and GET /branches returns metadata",
-    async () => {
-      const app = createApp();
-      const server = createNodeServerFromHono(app);
-      const authHeader = `Bearer ${jwtToken(authSecret, githubId)}`;
+  test("POST /branches/fork creates real branch DB and GET /branches returns metadata", async () => {
+    const app = createApp();
+    const server = createNodeServerFromHono(app);
+    const authHeader = `Bearer ${jwtToken(authSecret, githubId)}`;
 
-      const forkResponse = await request(server)
-        .post("/branches/fork")
-        .set("authorization", authHeader)
-        .send({
-          sourceDatabaseUrl,
-          branchName: "feature/integration-real-fork",
-        });
+    const forkResponse = await request(server)
+      .post("/branches/fork")
+      .set("authorization", authHeader)
+      .send({
+        sourceDatabaseUrl,
+        branchName: "feature/integration-real-fork",
+      });
 
-      expect(forkResponse.status).toBe(201);
-      expect(forkResponse.body.branchName).toBe("feature/integration-real-fork");
-      expect(forkResponse.body.status).toBe("READY");
-      expect(forkResponse.body.ownerGithubId).toBe(githubId);
+    expect(forkResponse.status).toBe(201);
+    expect(forkResponse.body.branchName).toBe("feature/integration-real-fork");
+    expect(forkResponse.body.status).toBe("READY");
+    expect(forkResponse.body.ownerGithubId).toBe(githubId);
 
-      const branchUrl = String(forkResponse.body.branchUrl);
-      const branchDatabaseName = new URL(branchUrl).pathname.replace(/^\//, "");
+    const branchUrl = String(forkResponse.body.branchUrl);
+    const branchDatabaseName = new URL(branchUrl).pathname.replace(/^\//, "");
 
-      const adminClient = new Client({ connectionString: maintenanceUrl });
-      await adminClient.connect();
-      const existsResult = await adminClient.query<{ exists: boolean }>(
-        "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS exists",
-        [branchDatabaseName]
-      );
-      await adminClient.end();
+    const adminClient = new Client({ connectionString: maintenanceUrl });
+    await adminClient.connect();
+    const existsResult = await adminClient.query<{ exists: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS exists",
+      [branchDatabaseName]
+    );
+    await adminClient.end();
 
-      expect(existsResult.rows[0]?.exists).toBe(true);
+    expect(existsResult.rows[0]?.exists).toBe(true);
 
-      const branchClient = new Client({ connectionString: branchUrl });
-      await branchClient.connect();
-      const seedResult = await branchClient.query<{ count: string }>(
-        "SELECT COUNT(*)::text AS count FROM seed_table WHERE value = 'seed'"
-      );
-      await branchClient.end();
-      expect(seedResult.rows[0]?.count).toBe("1");
+    const branchClient = new Client({ connectionString: branchUrl });
+    await branchClient.connect();
+    const seedResult = await branchClient.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM seed_table WHERE value = 'seed'"
+    );
+    await branchClient.end();
+    expect(seedResult.rows[0]?.count).toBe("1");
 
-      const listResponse = await request(server).get("/branches").set("authorization", authHeader);
-      expect(listResponse.status).toBe(200);
-      expect(
-        listResponse.body.some(
-          (branch: { branchName?: string; branchUrl?: string }) =>
-            branch.branchName === "feature/integration-real-fork" && branch.branchUrl === branchUrl
-        )
-      ).toBe(true);
-    },
-    180000
-  );
+    const listResponse = await request(server).get("/branches").set("authorization", authHeader);
+    expect(listResponse.status).toBe(200);
+    expect(
+      listResponse.body.some(
+        (branch: { branchName?: string; branchUrl?: string }) =>
+          branch.branchName === "feature/integration-real-fork" && branch.branchUrl === branchUrl
+      )
+    ).toBe(true);
+  }, 180000);
 });
