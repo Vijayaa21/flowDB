@@ -24,6 +24,7 @@ import { verifyGithubSignature } from "./security";
 import { VercelSdkClient, type VercelClient } from "./vercel-client";
 import { getConfig } from "./config";
 import { authMiddleware } from "./middleware/auth";
+import { PostgresUserRepository, type UserRepository, type UserProfile } from "./user-repository";
 import type { BranchRecord } from "./types";
 
 type ForkEngine = {
@@ -70,6 +71,7 @@ function createInMemoryWebhookReplayCache(): WebhookReplayCache {
 type OrchestratorDependencies = {
   forkEngine: ForkEngine;
   branches: BranchStateRepository;
+  users: UserRepository;
   vercel: VercelClient;
   githubComments: GithubCommentPublisher;
   webhookReplayCache: WebhookReplayCache;
@@ -202,10 +204,12 @@ function createDefaultDependencies(): OrchestratorDependencies {
   const config = getConfig();
   const hasVercelToken = Boolean(config.vercelApiToken);
   const githubToken = process.env.GITHUB_TOKEN;
+  const metaDatabaseUrl = config.databaseUrl ?? config.sourceDatabaseUrl;
 
   return {
     forkEngine: new PostgreSQLForkEngine(),
-    branches: new PostgresBranchStateRepository(config.databaseUrl ?? config.sourceDatabaseUrl),
+    branches: new PostgresBranchStateRepository(metaDatabaseUrl),
+    users: new PostgresUserRepository(metaDatabaseUrl),
     vercel: hasVercelToken ? new VercelSdkClient(config.vercelApiToken!) : new NoopVercelClient(),
     githubComments: githubToken
       ? new OctokitGithubCommentPublisher(githubToken)
@@ -317,27 +321,33 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
 }> {
   const defaults = partialDeps ? undefined : createDefaultDependencies();
   const deps: OrchestratorDependencies = {
-    ...(defaults ?? {
-      forkEngine: partialDeps?.forkEngine as ForkEngine,
-      branches: partialDeps?.branches as BranchStateRepository,
-      vercel: partialDeps?.vercel as VercelClient,
-      githubComments: partialDeps?.githubComments ?? new NoopGithubCommentPublisher(),
-      webhookReplayCache: partialDeps?.webhookReplayCache ?? createInMemoryWebhookReplayCache(),
-      migrationRunner: partialDeps?.migrationRunner ?? runPendingMigrations,
-      webhookSecret: partialDeps?.webhookSecret ?? "",
-      sourceDatabaseUrl: partialDeps?.sourceDatabaseUrl ?? "",
-      projectRoot: partialDeps?.projectRoot ?? process.cwd(),
-      version: partialDeps?.version ?? "0.1.0",
-      scheduleTask:
-        partialDeps?.scheduleTask ??
-        ((task) => {
-          setTimeout(() => {
-            void task();
-          }, 0);
-        }),
-    }),
+    ...(defaults ?? (() => {
+      const cfg = getConfig();
+      const metaDb = cfg.databaseUrl ?? cfg.sourceDatabaseUrl ?? "";
+      return {
+        forkEngine: partialDeps?.forkEngine as ForkEngine,
+        branches: partialDeps?.branches as BranchStateRepository,
+        users: partialDeps?.users ?? new PostgresUserRepository(metaDb),
+        vercel: partialDeps?.vercel as VercelClient,
+        githubComments: partialDeps?.githubComments ?? new NoopGithubCommentPublisher(),
+        webhookReplayCache: partialDeps?.webhookReplayCache ?? createInMemoryWebhookReplayCache(),
+        migrationRunner: partialDeps?.migrationRunner ?? runPendingMigrations,
+        webhookSecret: partialDeps?.webhookSecret ?? "",
+        sourceDatabaseUrl: partialDeps?.sourceDatabaseUrl ?? "",
+        projectRoot: partialDeps?.projectRoot ?? process.cwd(),
+        version: partialDeps?.version ?? "0.1.0",
+        scheduleTask:
+          partialDeps?.scheduleTask ??
+          ((task) => {
+            setTimeout(() => {
+              void task();
+            }, 0);
+          }),
+      };
+    })()),
     ...partialDeps,
   } as OrchestratorDependencies;
+
 
   const app = new Hono<{ Variables: AppVariables }>();
   const metrics = createRequestMetrics();
@@ -403,11 +413,22 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     deps.scheduleTask(executeWithRetry);
   };
 
+  // Build the allowed CORS origins list. Always permit local dev ports.
+  // In production, set DASHBOARD_ORIGIN (e.g. https://flowdb.example.com).
+  const corsOrigins: string[] = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:4010",
+  ];
+  const extraOrigin = process.env.DASHBOARD_ORIGIN?.trim();
+  if (extraOrigin) {
+    corsOrigins.push(extraOrigin);
+  }
+
   app.use(
     "/*",
     cors({
-      // Local dashboard runs on :3000. Keep :3001 and :4010 for existing tooling setups.
-      origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:4010"],
+      origin: corsOrigins,
       allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
       allowHeaders: [
         "Content-Type",
@@ -533,6 +554,47 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     }
 
     return authMiddleware(c, next);
+  });
+
+  /**
+   * POST /users/sync
+   * Called by the dashboard immediately after GitHub OAuth completes.
+   * Upserts the user record so we have persistent identity data.
+   * Requires a valid Bearer token (JWT signed with AUTH_SECRET).
+   */
+  app.post("/users/sync", async (c) => {
+    const githubId = c.get("githubId") as string;
+    let body: Partial<UserProfile> = {};
+
+    try {
+      body = (await c.req.json()) as Partial<UserProfile>;
+    } catch {
+      // Body is optional — we can sync with just the githubId from the token
+    }
+
+    try {
+      await deps.users.upsert({
+        githubId,
+        githubLogin: body.githubLogin ?? githubId,
+        githubEmail: body.githubEmail ?? null,
+        displayName: body.displayName ?? null,
+        avatarUrl: body.avatarUrl ?? null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          event: "user_sync_failed",
+          githubId,
+          error: message,
+        })
+      );
+      return c.json({ error: "Failed to sync user record." }, 500);
+    }
+
+    return c.json({ synced: true, githubId }, 200);
   });
 
   async function createBranch(c: AppContext, envelope: boolean) {

@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import readline from "node:readline";
 
 import chalk from "chalk";
 import { Command } from "commander";
@@ -258,6 +259,23 @@ async function commandWrapper(ui: Ui, action: () => Promise<void>, exit: (code: 
   }
 }
 
+/**
+ * Prompts the user for a y/N confirmation on stdin.
+ * Returns true if the user types 'y' or 'yes' (case-insensitive).
+ */
+function askConfirm(question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question(`${question} [y/N] `, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+    });
+  });
+}
+
 function loadOrchestratorConfig(
   env: NodeJS.ProcessEnv,
   credentialManager?: CredentialManager
@@ -392,6 +410,65 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
       );
     });
 
+  // ─── logout ────────────────────────────────────────────────────────────────
+  program
+    .command("logout")
+    .description("Remove saved FlowDB credentials")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          if (!deps.credentialManager) {
+            throw new Error("Credential manager not available");
+          }
+
+          if (!deps.credentialManager.hasCredentials()) {
+            deps.ui.log(chalk.yellow("No saved credentials found — already logged out."));
+            return;
+          }
+
+          deps.credentialManager.deleteCredentials();
+          deps.ui.log(chalk.green("✓ Credentials removed. You are now logged out."));
+        },
+        deps.exit
+      );
+    });
+
+  // ─── whoami ────────────────────────────────────────────────────────────────
+  program
+    .command("whoami")
+    .description("Show the current FlowDB login identity")
+    .action(async () => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          if (!deps.credentialManager) {
+            throw new Error("Credential manager not available");
+          }
+
+          const creds = deps.credentialManager.loadCredentials();
+          if (!creds) {
+            deps.ui.log(chalk.yellow("Not logged in. Run 'flowdb login' first."));
+            return;
+          }
+
+          deps.ui.log(chalk.bold("FlowDB Identity"));
+          deps.ui.log(`  Orchestrator : ${chalk.cyan(creds.apiUrl)}`);
+          deps.ui.log(`  Org          : ${chalk.cyan(creds.orgSlug)}`);
+          deps.ui.log(`  Project      : ${chalk.cyan(creds.projectSlug)}`);
+          if (creds.apiKey) {
+            const masked = `${creds.apiKey.slice(0, 4)}${"".padEnd(creds.apiKey.length - 8, "*")}${creds.apiKey.slice(-4)}`;
+            deps.ui.log(`  Auth         : api-key ${chalk.cyan(masked)}`);
+          } else if (creds.jwtToken) {
+            deps.ui.log(`  Auth         : ${chalk.cyan("jwt token")}`);
+          }
+          deps.ui.log(`  Saved at     : ${chalk.dim(creds.updatedAt)}`);
+        },
+        deps.exit
+      );
+    });
+
+  // ─── health ────────────────────────────────────────────────────────────────
   program
     .command("health")
     .description("Check orchestrator health")
@@ -545,10 +622,15 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
 
           if (!options.yes) {
             deps.ui.log(
-              chalk.yellow(`Warning: This will delete branch '${name}' and all its data.`)
+              chalk.yellow(
+                `⚠  This will permanently delete branch '${name}' and all its data. This cannot be undone.`
+              )
             );
-            // In a real CLI, prompt for confirmation here
-            // For now, just proceed
+            const confirmed = await askConfirm(`Delete branch '${name}'?`);
+            if (!confirmed) {
+              deps.ui.log(chalk.dim("Aborted."));
+              return;
+            }
           }
 
           const client = new OrchestratorClient(orchConfig);
@@ -556,11 +638,91 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
 
           try {
             await client.deleteBranch(name);
-            spinner.succeed(`Branch deleted: ${name}`);
+            spinner.succeed(`Branch deleted: ${chalk.bold(name)}`);
           } catch (error) {
             spinner.fail();
             throw error;
           }
+        },
+        deps.exit
+      );
+    });
+
+  // ─── branch connect ────────────────────────────────────────────────────────
+  branch
+    .command("connect")
+    .argument("<name>", "Branch name")
+    .description("Print the DATABASE_URL for a branch so you can paste it into .env.local")
+    .option("--export", "Prefix output with 'export ' for shell eval")
+    .option("--write", "Write DATABASE_URL directly to .env.local in the current directory")
+    .action(async (name: string, options: { export?: boolean; write?: boolean }) => {
+      await commandWrapper(
+        deps.ui,
+        async () => {
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+
+          if (!orchConfig) {
+            throw new Error("Orchestrator not configured. Run 'flowdb login' first.");
+          }
+
+          const client = new OrchestratorClient(orchConfig);
+          const spinner = deps.ui.spinner(`Looking up branch '${name}'...`).start();
+
+          let databaseUrl: string | undefined;
+
+          try {
+            const response = await client.listBranches(100);
+            const match = (response.items ?? []).find(
+              (b) => b.name === name
+            );
+
+            if (!match) {
+              spinner.fail();
+              throw new Error(
+                `Branch '${name}' not found. Run 'flowdb branch list' to see available branches.`
+              );
+            }
+
+            databaseUrl = match.databaseUrl;
+            spinner.stop();
+          } catch (error) {
+            spinner.fail();
+            throw error;
+          }
+
+          if (!databaseUrl) {
+            throw new Error(
+              `Branch '${name}' found but has no database URL yet. It may still be creating.`
+            );
+          }
+
+          if (options.write) {
+            const cwd = deps.cwd();
+            await writeEnvLocal(cwd, databaseUrl);
+            deps.ui.log(
+              chalk.green(`✓ DATABASE_URL written to ${chalk.bold(".env.local")} in ${cwd}`)
+            );
+            deps.ui.log(chalk.dim(`  ${databaseUrl}`));
+            return;
+          }
+
+          const line = options.export
+            ? `export DATABASE_URL="${databaseUrl}"`
+            : `DATABASE_URL="${databaseUrl}"`;
+
+          deps.ui.log("");
+          deps.ui.log(chalk.bold(`Branch: ${name}`));
+          deps.ui.log(chalk.dim("──────────────────────────────────────────────"));
+          deps.ui.log(chalk.cyan(line));
+          deps.ui.log(chalk.dim("──────────────────────────────────────────────"));
+          deps.ui.log("");
+          deps.ui.log(chalk.dim("Copy the line above into your .env.local, or:"));
+          deps.ui.log(
+            chalk.dim(`  Run 'flowdb branch connect ${name} --write' to write it automatically.`)
+          );
+          deps.ui.log(
+            chalk.dim(`  Run 'eval $(flowdb branch connect ${name} --export)' to set it in your shell.`)
+          );
         },
         deps.exit
       );
@@ -682,6 +844,118 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
         deps.exit
       );
     });
+
+  // ─── migrate ───────────────────────────────────────────────────────────────
+  program
+    .command("migrate")
+    .argument("<branch>", "Branch name or branch database name")
+    .description("Run pending migrations from your project against a branch database")
+    .option(
+      "--migrations-dir <dir>",
+      "Path to migrations directory (default: auto-detected by ORM)"
+    )
+    .option("--dry-run", "Show which migrations would run without applying them")
+    .action(
+      async (branchName: string, options: { migrationsDir?: string; dryRun?: boolean }) => {
+        await commandWrapper(
+          deps.ui,
+          async () => {
+            const cwd = deps.cwd();
+            const config = await readConfig(cwd, deps.env);
+            const spinner = deps
+              .ui
+              .spinner(`Resolving branch database for '${branchName}'...`)
+              .start();
+
+            const branchDbName = await resolveBranchDbName(
+              deps.forkEngine,
+              config.sourceDatabaseUrl,
+              branchName
+            );
+            const branchDbUrl = withDatabaseName(config.sourceDatabaseUrl, branchDbName);
+
+            // Resolve migrations directory
+            const { parseMigrations } = await loadReconciler();
+            const migrationsDir =
+              options.migrationsDir ??
+              (() => {
+                if (config.orm === "prisma") return path.join(cwd, "prisma", "migrations");
+                if (config.orm === "drizzle") return path.join(cwd, "drizzle");
+                return path.join(cwd, "migrations");
+              })();
+
+            spinner.text = `Scanning migrations in ${migrationsDir}...`;
+            const allMigrations = await parseMigrations(cwd);
+
+            // Find which migrations are already applied on the branch
+            const appliedIds = await queryAppliedMigrationIds(branchDbUrl);
+            const pending = allMigrations.filter((m) => !appliedIds.has(m.id));
+
+            spinner.stop();
+
+            if (pending.length === 0) {
+              deps.ui.log(chalk.green(`✓ Branch '${branchName}' is up to date. No pending migrations.`));
+              return;
+            }
+
+            deps.ui.log(chalk.bold(`\n${pending.length} pending migration(s) for '${branchName}':`));
+            for (const migration of pending) {
+              deps.ui.log(`  ${chalk.cyan("+")} ${migration.filename}`);
+            }
+            deps.ui.log("");
+
+            if (options.dryRun) {
+              deps.ui.log(chalk.yellow("Dry run — no migrations applied."));
+              return;
+            }
+
+            // Apply migrations one by one
+            const client = new (await import("pg")).Client({ connectionString: branchDbUrl });
+            await client.connect();
+
+            let applied = 0;
+            try {
+              await client.query(`
+                CREATE TABLE IF NOT EXISTS flowdb_applied_migrations (
+                  id TEXT PRIMARY KEY,
+                  filename TEXT NOT NULL,
+                  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+              `);
+
+              for (const migration of pending) {
+                const migrateSpinner = deps.ui
+                  .spinner(`Applying ${migration.filename}...`)
+                  .start();
+                try {
+                  await client.query("BEGIN");
+                  await client.query(migration.sql);
+                  await client.query(
+                    "INSERT INTO flowdb_applied_migrations (id, filename) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                    [migration.id, migration.filename]
+                  );
+                  await client.query("COMMIT");
+                  migrateSpinner.succeed(`Applied ${chalk.bold(migration.filename)}`);
+                  applied++;
+                } catch (err) {
+                  await client.query("ROLLBACK");
+                  migrateSpinner.fail(`Failed: ${migration.filename}`);
+                  throw err;
+                }
+              }
+            } finally {
+              await client.end();
+            }
+
+            deps.ui.log("");
+            deps.ui.log(
+              chalk.green(`✓ Applied ${applied} migration(s) to branch '${branchName}'.`)
+            );
+          },
+          deps.exit
+        );
+      }
+    );
 
   program
     .command("status")

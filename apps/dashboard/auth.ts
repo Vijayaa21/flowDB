@@ -128,9 +128,22 @@ const authConfig: NextAuthConfig = {
     error: "/auth/error",
   },
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, profile }) {
       if (account?.provider === "github" && account.providerAccountId) {
         token.githubId = account.providerAccountId;
+      }
+      // Capture GitHub profile fields on first sign-in (profile is only present then)
+      if (profile) {
+        const ghProfile = profile as {
+          login?: string;
+          email?: string | null;
+          name?: string | null;
+          avatar_url?: string | null;
+        };
+        if (ghProfile.login) token.githubLogin = ghProfile.login;
+        if (ghProfile.email) token.githubEmail = ghProfile.email;
+        if (ghProfile.name) token.displayName = ghProfile.name;
+        if (ghProfile.avatar_url) token.avatarUrl = ghProfile.avatar_url;
       }
       if (typeof token.githubId === "string") {
         token.flowdbToken = await signFlowDbToken(token.githubId, resolvedAuthSecret);
@@ -140,6 +153,12 @@ const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (session.user) {
         session.user.githubId = typeof token.githubId === "string" ? token.githubId : undefined;
+        session.user.githubLogin =
+          typeof token.githubLogin === "string" ? token.githubLogin : undefined;
+        session.user.displayName =
+          typeof token.displayName === "string" ? token.displayName : undefined;
+        session.user.avatarUrl =
+          typeof token.avatarUrl === "string" ? token.avatarUrl : undefined;
       }
       session.token = typeof token.flowdbToken === "string" ? token.flowdbToken : undefined;
       return session;

@@ -751,6 +751,31 @@ export default function HomePage() {
     document.documentElement.classList.toggle("dark", shouldUseDark);
   }, []);
 
+  // Sync the signed-in GitHub user to the orchestrator's persistent users table.
+  // Runs once when the session becomes authenticated. Failures are swallowed silently
+  // so that a misconfigured orchestrator URL never blocks the dashboard from loading.
+  useEffect(() => {
+    if (!hasFlowDbToken || !session?.user) {
+      return;
+    }
+    const currentConfig = readDashboardConfig();
+    void api.users
+      .sync(
+        {
+          githubLogin: session.user.githubLogin,
+          githubEmail: session.user.email ?? null,
+          displayName: session.user.displayName ?? session.user.name ?? null,
+          avatarUrl: session.user.avatarUrl ?? session.user.image ?? null,
+        },
+        currentConfig
+      )
+      .catch(() => {
+        // Non-fatal — orchestrator may not be reachable yet
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasFlowDbToken]);
+
+
   const branches = branchesQuery.data ?? [];
   const hasRequiredConfig =
     config.orchestratorUrl.length > 0 &&

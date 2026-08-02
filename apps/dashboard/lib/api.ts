@@ -186,4 +186,24 @@ export const api = {
   health: {
     check: (config: DashboardConfig) => apiFetch<HealthStatus>("/health", config),
   },
+  users: {
+    /**
+     * Syncs the signed-in GitHub user profile to the orchestrator's persistent users table.
+     * Should be called once after session is established.
+     */
+    sync: (
+      profile: {
+        githubLogin?: string;
+        githubEmail?: string | null;
+        displayName?: string | null;
+        avatarUrl?: string | null;
+      },
+      config: DashboardConfig
+    ) =>
+      apiFetch<{ synced: boolean; githubId: string }>("/users/sync", config, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      }),
+  },
 };
