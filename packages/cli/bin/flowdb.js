@@ -7,7 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const entry = path.resolve(__dirname, "../src/index.ts");
 
-const child = spawn(process.execPath, ["--import", "tsx", entry, ...process.argv.slice(2)], {
+// Bun is required for this monorepo (see engines in package.json).
+// Bun natively runs TypeScript so we spawn it directly — no tsx needed.
+const child = spawn("bun", [entry, ...process.argv.slice(2)], {
   stdio: "inherit",
   env: process.env,
 });

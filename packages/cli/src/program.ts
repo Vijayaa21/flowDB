@@ -504,67 +504,97 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
   branch
     .command("list")
     .description("List active branch databases")
-    .action(async () => {
+    .option("--local", "Use local fork engine instead of orchestrator")
+    .action(async (options: { local?: boolean }) => {
       await commandWrapper(
         deps.ui,
         async () => {
-          const cwd = deps.cwd();
-          const config = await readConfig(cwd, deps.env);
-          const spinner = deps.ui.spinner("Loading branch databases...").start();
+          const orchConfig = !options.local
+            ? loadOrchestratorConfig(deps.env, deps.credentialManager)
+            : null;
 
-          // Try to use orchestrator if available
-          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
-          let rows: string[][] = [];
-
+          // ── Orchestrator path ────────────────────────────────────────────
           if (orchConfig) {
+            const client = new OrchestratorClient(orchConfig);
+            const spinner = deps.ui.spinner("Fetching branches from orchestrator...").start();
+
+            let response: Awaited<ReturnType<typeof client.listBranches>>;
             try {
-              const client = new OrchestratorClient(orchConfig);
-              const response = await client.listBranches(25);
+              response = await client.listBranches(100);
               spinner.stop();
-
-              for (const branch of response.items || []) {
-                rows.push([
-                  branch.name,
-                  chalk.green("active"),
-                  branch.createdAt
-                    ? chalk.cyan(new Date(branch.createdAt).toLocaleDateString())
-                    : "unknown",
-                ]);
-              }
-
-              if (rows.length === 0) {
-                deps.ui.log(chalk.yellow("No branches found"));
-              } else {
-                deps.ui.log(renderTable(["name", "status", "created"], rows));
-              }
-
-              return;
-            } catch {
-              // Fall through to local fork engine if orchestrator fails
-              spinner.text = "Falling back to local branch detection...";
+            } catch (error) {
+              spinner.fail("Failed to reach orchestrator");
+              throw error;
             }
+
+            const items = response.items ?? [];
+            if (items.length === 0) {
+              deps.ui.log(chalk.yellow("No active branches found."));
+              deps.ui.log(
+                chalk.dim("  Create one with: flowdb branch create <name>")
+              );
+              return;
+            }
+
+            const rows = items.map((b) => {
+              const statusColor =
+                b.status === "active"
+                  ? chalk.green(b.status)
+                  : b.status === "failed"
+                    ? chalk.red(b.status)
+                    : chalk.yellow(b.status ?? "unknown");
+
+              const age = b.createdAt
+                ? chalk.cyan(new Date(b.createdAt).toLocaleDateString())
+                : chalk.dim("unknown");
+
+              return [b.name, statusColor, age, chalk.dim(b.databaseUrl ?? "—")];
+            });
+
+            deps.ui.log("");
+            deps.ui.log(renderTable(["branch", "status", "created", "url"], rows));
+            deps.ui.log(
+              chalk.dim(
+                `\n${items.length} branch(es) — run 'flowdb branch connect <name>' to get the DATABASE_URL`
+              )
+            );
+            return;
           }
 
-          // Fallback to local fork engine
-          const branches = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
+          // ── Local fork engine fallback ──────────────────────────────────
+          const cwd = deps.cwd();
+          const config = await readConfig(cwd, deps.env);
+          const spinner = deps.ui.spinner("Scanning local branch databases...").start();
 
-          for (const branch of branches) {
-            const name = branch.name;
-            const url = withDatabaseName(config.sourceDatabaseUrl, name);
+          const branches = await deps.forkEngine.listBranches(config.sourceDatabaseUrl);
+          const rows: string[][] = [];
+
+          for (const b of branches) {
+            const url = withDatabaseName(config.sourceDatabaseUrl, b.name);
             const healthy = await deps.forkEngine.healthCheck(url);
             rows.push([
-              name,
+              b.name,
               healthy ? chalk.green("active") : chalk.red("unreachable"),
-              chalk.cyan(formatAge(branch.name)),
+              chalk.cyan(formatAge(b.name)),
             ]);
           }
 
           spinner.stop();
-          deps.ui.log(renderTable(["name", "status", "age"], rows));
+
+          if (rows.length === 0) {
+            deps.ui.log(chalk.yellow("No local branch databases found."));
+            deps.ui.log(
+              chalk.dim("  Tip: Run 'flowdb login' to connect to an orchestrator.")
+            );
+            return;
+          }
+
+          deps.ui.log(renderTable(["branch", "status", "age"], rows));
         },
         deps.exit
       );
     });
+
 
   branch
     .command("create")
@@ -959,34 +989,93 @@ export function createProgram(inputDeps?: Partial<CliDeps>): Command {
 
   program
     .command("status")
-    .description("Show branch and migration status")
+    .description("Show connection and migration status")
     .action(async () => {
       await commandWrapper(
         deps.ui,
         async () => {
           const cwd = deps.cwd();
-          const config = await readConfig(cwd, deps.env);
-          const spinner = deps.ui.spinner("Collecting status...").start();
-          const { parseMigrations } = await loadReconciler();
+          const gitBranch = currentGitBranch(cwd);
 
-          const branchName = currentGitBranch(cwd);
+          deps.ui.log(chalk.bold("FlowDB Status"));
+          deps.ui.log(chalk.dim("─────────────────────────────────────────────────"));
+          deps.ui.log(`  Git branch   : ${chalk.cyan(gitBranch)}`);
+
+          // ── Orchestrator connectivity ──────────────────────────────────
+          const orchConfig = loadOrchestratorConfig(deps.env, deps.credentialManager);
+          if (orchConfig) {
+            const client = new OrchestratorClient(orchConfig);
+            try {
+              const health = await client.health();
+              deps.ui.log(
+                `  Orchestrator : ${chalk.green("connected")} ${chalk.dim(`(${orchConfig.apiUrl} v${health.version})`)}`
+              );
+              const branches = await client.listBranches(100);
+              const active = (branches.items ?? []).filter((b) => b.status === "active");
+              deps.ui.log(
+                `  Branches     : ${chalk.cyan(String(active.length))} active`
+              );
+            } catch {
+              deps.ui.log(
+                `  Orchestrator : ${chalk.red("unreachable")} ${chalk.dim(`(${orchConfig.apiUrl})`)}`
+              );
+            }
+          } else {
+            deps.ui.log(
+              `  Orchestrator : ${chalk.yellow("not configured")} ${chalk.dim("— run 'flowdb login'")}`
+            );
+          }
+
+          // ── Local project config & migrations ─────────────────────────
+          let config: Awaited<ReturnType<typeof readConfig>> | null = null;
+          try {
+            config = await readConfig(cwd, deps.env);
+          } catch {
+            deps.ui.log(
+              `  Local config : ${chalk.yellow("not found")} ${chalk.dim("— run 'flowdb init'")}`
+            );
+            deps.ui.log(chalk.dim("─────────────────────────────────────────────────"));
+            return;
+          }
+
+          deps.ui.log(chalk.dim("─────────────────────────────────────────────────"));
+
+          const spinner = deps.ui.spinner("Checking local database and migrations...").start();
           const dbHealthy = await deps.forkEngine.healthCheck(config.sourceDatabaseUrl);
+          spinner.text = "Scanning migrations...";
 
+          const { parseMigrations } = await loadReconciler();
           const migrations = await parseMigrations(cwd);
           const appliedIds = await queryAppliedMigrationIds(config.sourceDatabaseUrl);
-          const pending = migrations.filter((migration) => !appliedIds.has(migration.id));
+          const pending = migrations.filter((m) => !appliedIds.has(m.id));
 
           spinner.stop();
-          deps.ui.log(chalk.bold("FlowDB Status"));
-          deps.ui.log(`current branch: ${chalk.cyan(branchName)}`);
+
+          deps.ui.log(chalk.bold("  Local project"));
           deps.ui.log(
-            `db connection: ${dbHealthy ? chalk.green("connected") : chalk.red("disconnected")}`
+            `  DB source    : ${dbHealthy ? chalk.green("connected") : chalk.red("disconnected")}`
           );
-          deps.ui.log(`pending migrations: ${chalk.yellow(String(pending.length))}`);
+          deps.ui.log(`  ORM          : ${chalk.cyan(config.orm)}`);
+          deps.ui.log(
+            `  Migrations   : ${chalk.cyan(String(migrations.length))} total, ${
+              pending.length > 0
+                ? chalk.yellow(`${pending.length} pending`)
+                : chalk.green("all applied")
+            }`
+          );
+
+          if (pending.length > 0) {
+            deps.ui.log(chalk.dim("  Pending:"));
+            for (const m of pending) {
+              deps.ui.log(`    ${chalk.yellow("+")} ${m.filename}`);
+            }
+          }
+          deps.ui.log(chalk.dim("─────────────────────────────────────────────────"));
         },
         deps.exit
       );
     });
+
 
   return program;
 }
