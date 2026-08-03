@@ -20,7 +20,8 @@
     "test": "vitest run",
     "flowdb": "bun packages/cli/src/index.ts",
     "dev:orchestrator": "bun run --cwd apps/orchestrator dev",
-    "dev:dashboard": "bun run --cwd apps/dashboard dev"
+    "dev:dashboard": "bun run --cwd apps/dashboard dev",
+    "dev:docs": "bun run --cwd apps/docs dev"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
@@ -31,5 +32,10 @@
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
+  },
+  "dependencies": {
+    "next": "^16.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
