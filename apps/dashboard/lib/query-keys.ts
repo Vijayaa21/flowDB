@@ -17,4 +17,9 @@ export const queryKeys = {
       config.projectSlug,
       config.environment,
     ] as const,
+  userMe: (config: DashboardConfig) =>
+    [
+      "userMe",
+      config.orchestratorUrl,
+    ] as const,
 };

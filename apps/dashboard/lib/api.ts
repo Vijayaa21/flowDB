@@ -205,5 +205,16 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
       }),
+    me: (config: DashboardConfig) =>
+      apiFetch<{
+        githubId: string;
+        githubLogin: string;
+        displayName: string | null;
+        avatarUrl: string | null;
+        githubEmail: string | null;
+        createdAt: string;
+        lastSeenAt: string;
+      }>("/users/me", config),
   },
 };
+

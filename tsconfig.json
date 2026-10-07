@@ -4,5 +4,6 @@
     "noEmit": true,
     "jsx": "preserve"
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "apps/**/*.tsx", "tests/**/*.ts"]
+  "include": ["packages/**/*.ts", "apps/**/*.ts", "apps/**/*.tsx", "tests/**/*.ts"],
+  "exclude": ["**/node_modules", "**/.next"]
 }

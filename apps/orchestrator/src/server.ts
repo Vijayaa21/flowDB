@@ -597,6 +597,51 @@ export function createApp(partialDeps?: Partial<OrchestratorDependencies>): Hono
     return c.json({ synced: true, githubId }, 200);
   });
 
+  /**
+   * GET /users/me
+   * Returns the authenticated user's profile from flowdb_users.
+   * Requires a valid Bearer token or Api-Key.
+   */
+  app.get("/users/me", async (c) => {
+    const githubId = c.get("githubId") as string;
+
+    try {
+      const user = await deps.users.getByGithubId(githubId);
+
+      if (!user) {
+        return c.json(
+          { error: "User not found. Call POST /users/sync first.", githubId },
+          404
+        );
+      }
+
+      return c.json(
+        {
+          githubId: user.githubId,
+          githubLogin: user.githubLogin,
+          displayName: user.displayName ?? null,
+          avatarUrl: user.avatarUrl ?? null,
+          githubEmail: user.githubEmail ?? null,
+          createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : user.createdAt,
+          lastSeenAt: user.lastSeenAt instanceof Date ? user.lastSeenAt.toISOString() : user.lastSeenAt,
+        },
+        200
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: "error",
+          event: "get_user_me_failed",
+          githubId,
+          error: message,
+        })
+      );
+      return c.json({ error: "Failed to fetch user profile." }, 500);
+    }
+  });
+
   async function createBranch(c: AppContext, envelope: boolean) {
     const githubId = c.get("githubId") as string;
     const payload = await c.req.json();

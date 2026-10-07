@@ -230,8 +230,17 @@ function BranchHealthFeed({
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4 text-sm text-(--gh-fg-muted)">
-        No active branches — open a PR to get started
+      <div className="rounded-xl border border-dashed border-(--gh-border-default) bg-(--gh-canvas-default) p-6 text-center">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-(--gh-canvas-subtle) text-lg">
+          🌱
+        </div>
+        <p className="mt-3 text-sm font-semibold text-(--gh-fg-default)">No active branches yet</p>
+        <p className="mt-1 text-xs text-(--gh-fg-muted)">
+          Fork your source database using the form above or use the FlowDB CLI from your terminal:
+        </p>
+        <div className="mt-3 inline-block rounded-lg bg-(--gh-canvas-subtle) px-3 py-1.5 font-mono text-xs text-(--gh-fg-default)">
+          flowdb branch create feature/my-new-feature
+        </div>
       </div>
     );
   }
@@ -279,122 +288,338 @@ function SetupWizard({
   onConfigChange: (patch: Partial<DashboardConfig>) => void;
   onSave: () => Promise<void>;
 }) {
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "success" | "error">("idle");
+  const [connectionMessage, setConnectionMessage] = useState("");
+
   const completed = steps.filter((step) => step.isDone).length;
+  const progressPercent = Math.round((completed / steps.length) * 100);
+
+  const wizardTabs = [
+    { id: 0, title: "1. Authentication", desc: "Connect GitHub" },
+    { id: 1, title: "2. Orchestrator", desc: "API Endpoint" },
+    { id: 2, title: "3. Project Scope", desc: "Org & Project" },
+    { id: 3, title: "4. Source Database", desc: "Postgres Connection" },
+  ];
+
+  const handleTestOrchestrator = async () => {
+    setTestingConnection(true);
+    setConnectionStatus("idle");
+    setConnectionMessage("");
+    try {
+      const url = draftConfig.orchestratorUrl.trim().replace(/\/+$/, "");
+      const res = await fetch(`${url}/health`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as { status?: string; version?: string };
+        setConnectionStatus("success");
+        setConnectionMessage(`Connected successfully! Version: ${data.version ?? "unknown"}`);
+      } else {
+        setConnectionStatus("error");
+        setConnectionMessage(`Orchestrator returned HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setConnectionStatus("error");
+      setConnectionMessage(
+        err instanceof Error
+          ? `Connection failed: ${err.message}`
+          : "Could not reach orchestrator. Is it running?"
+      );
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   return (
-    <section className="rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="rounded-2xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-(--gh-border-default) pb-5">
         <div>
-          <h2 className="m-0 text-base font-medium text-(--gh-fg-default)">Project Setup Wizard</h2>
+          <div className="inline-flex items-center gap-2 rounded-full border border-(--gh-border-default) bg-(--gh-canvas-subtle) px-3 py-1 text-xs font-semibold uppercase tracking-wider text-(--gh-fg-muted)">
+            <span>🚀</span> First-Run Onboarding
+          </div>
+          <h2 className="mt-2 text-lg font-semibold text-(--gh-fg-default)">
+            Configure Your FlowDB Workspace
+          </h2>
           <p className="mt-1 text-sm text-(--gh-fg-muted)">
-            Complete these steps once to start creating and managing branches.
+            Follow this 4-step wizard to connect your orchestrator and source database.
           </p>
         </div>
-        <span className="rounded-full border border-(--gh-border-default) px-3 py-1 text-xs text-(--gh-fg-muted)">
-          {completed}/{steps.length} completed
-        </span>
+        <div className="text-right">
+          <span className="text-sm font-semibold text-(--gh-fg-default)">
+            {completed}/{steps.length} completed ({progressPercent}%)
+          </span>
+          <div className="mt-2 h-2 w-36 overflow-hidden rounded-full bg-(--gh-canvas-subtle)">
+            <div
+              className="h-full bg-emerald-500 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 space-y-2">
-        {steps.map((step) => (
-          <div
-            key={step.key}
-            className="flex items-start justify-between gap-3 rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) px-3 py-2"
-          >
-            <div>
-              <p className="text-sm font-medium text-(--gh-fg-default)">{step.label}</p>
-              <p className="text-xs text-(--gh-fg-muted)">{step.description}</p>
-            </div>
-            <span
-              className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-                step.isDone
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"
-                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+      {/* Step Tabs */}
+      <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {wizardTabs.map((tab) => {
+          const isTabActive = currentStepIndex === tab.id;
+          const isTabDone = steps[tab.id]?.isDone ?? false;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setCurrentStepIndex(tab.id)}
+              className={`flex flex-col items-start rounded-xl border p-3 text-left transition ${
+                isTabActive
+                  ? "border-(--gh-accent-emphasis) bg-(--gh-accent-emphasis)/10"
+                  : "border-(--gh-border-default) bg-(--gh-canvas-subtle) hover:border-(--gh-border-muted)"
               }`}
             >
-              {step.isDone ? "Done" : "Pending"}
-            </span>
+              <div className="flex w-full items-center justify-between">
+                <span
+                  className={`text-xs font-medium ${
+                    isTabActive ? "text-(--gh-accent-emphasis)" : "text-(--gh-fg-muted)"
+                  }`}
+                >
+                  {tab.title}
+                </span>
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    isTabDone ? "bg-emerald-500" : isTabActive ? "bg-(--gh-accent-emphasis)" : "bg-amber-400"
+                  }`}
+                />
+              </div>
+              <span className="mt-1 text-xs font-semibold text-(--gh-fg-default)">
+                {tab.desc}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Step Content */}
+      <div className="mt-6 rounded-xl border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-5">
+        {currentStepIndex === 0 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-(--gh-fg-default)">
+                Step 1: Sign in with GitHub
+              </h3>
+              <p className="mt-1 text-xs text-(--gh-fg-muted)">
+                FlowDB uses GitHub OAuth as its identity provider. All database branches are scoped to your authenticated identity.
+              </p>
+            </div>
+            {isSignedIn ? (
+              <div className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                <span className="text-base">✅</span>
+                <span>You are signed in with GitHub. Your identity is active.</span>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                <p className="font-medium">Authentication required</p>
+                <p className="mt-1 text-xs">
+                  Click the button below to sign in with GitHub via NextAuth.
+                </p>
+                <button
+                  type="button"
+                  onClick={onSignIn}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-(--gh-accent-emphasis) px-4 py-2 text-xs font-medium text-white hover:brightness-110"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                  </svg>
+                  Sign in with GitHub
+                </button>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(1)}
+                className="rounded-lg bg-(--gh-accent-emphasis) px-4 py-2 text-xs font-medium text-white hover:brightness-110"
+              >
+                Next: Orchestrator URL →
+              </button>
+            </div>
           </div>
-        ))}
+        )}
+
+        {currentStepIndex === 1 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-(--gh-fg-default)">
+                Step 2: Configure Orchestrator Endpoint
+              </h3>
+              <p className="mt-1 text-xs text-(--gh-fg-muted)">
+                The orchestrator is the backend REST service (Hono/Bun) that communicates with PostgreSQL to fork databases.
+              </p>
+            </div>
+            <label className="block text-xs font-medium text-(--gh-fg-muted)">
+              Orchestrator URL
+              <input
+                type="text"
+                value={draftConfig.orchestratorUrl}
+                onChange={(e) => onConfigChange({ orchestratorUrl: e.target.value })}
+                className="mt-1.5 w-full rounded-md border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-2 font-mono text-xs text-(--gh-fg-default)"
+                placeholder="http://localhost:3001"
+              />
+              <span className="mt-1 block text-[11px] text-(--gh-fg-muted)">
+                Default local dev port: <code className="font-mono">http://localhost:3001</code>
+              </span>
+            </label>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleTestOrchestrator()}
+                disabled={testingConnection || !draftConfig.orchestratorUrl.trim()}
+                className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-1.5 text-xs font-medium text-(--gh-fg-default) hover:bg-(--gh-canvas-subtle) disabled:opacity-60"
+              >
+                {testingConnection ? "Testing..." : "Test Connection"}
+              </button>
+              {connectionStatus === "success" && (
+                <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                  ✅ {connectionMessage}
+                </span>
+              )}
+              {connectionStatus === "error" && (
+                <span className="text-xs text-red-600 dark:text-red-400">
+                  ❌ {connectionMessage}
+                </span>
+              )}
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(0)}
+                className="rounded-lg border border-(--gh-border-default) px-3 py-1.5 text-xs text-(--gh-fg-muted) hover:text-(--gh-fg-default)"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(2)}
+                className="rounded-lg bg-(--gh-accent-emphasis) px-4 py-2 text-xs font-medium text-white hover:brightness-110"
+              >
+                Next: Project Scope →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {currentStepIndex === 2 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-(--gh-fg-default)">
+                Step 3: Define Scope & Environment
+              </h3>
+              <p className="mt-1 text-xs text-(--gh-fg-muted)">
+                Set the organization slug, project identifier, and deployment environment for tracking and tagging branches.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="text-xs font-medium text-(--gh-fg-muted)">
+                Environment
+                <input
+                  type="text"
+                  value={draftConfig.environment}
+                  onChange={(e) => onConfigChange({ environment: e.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-2 text-xs text-(--gh-fg-default)"
+                  placeholder="local"
+                />
+              </label>
+              <label className="text-xs font-medium text-(--gh-fg-muted)">
+                Organization Slug
+                <input
+                  type="text"
+                  value={draftConfig.orgSlug}
+                  onChange={(e) => onConfigChange({ orgSlug: e.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-2 text-xs text-(--gh-fg-default)"
+                  placeholder="acme"
+                />
+              </label>
+              <label className="text-xs font-medium text-(--gh-fg-muted)">
+                Project Slug
+                <input
+                  type="text"
+                  value={draftConfig.projectSlug}
+                  onChange={(e) => onConfigChange({ projectSlug: e.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-2 text-xs text-(--gh-fg-default)"
+                  placeholder="flowdb"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(1)}
+                className="rounded-lg border border-(--gh-border-default) px-3 py-1.5 text-xs text-(--gh-fg-muted) hover:text-(--gh-fg-default)"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(3)}
+                className="rounded-lg bg-(--gh-accent-emphasis) px-4 py-2 text-xs font-medium text-white hover:brightness-110"
+              >
+                Next: Source Database →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {currentStepIndex === 3 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-(--gh-fg-default)">
+                Step 4: Source Database Connection
+              </h3>
+              <p className="mt-1 text-xs text-(--gh-fg-muted)">
+                This is the primary PostgreSQL database that FlowDB forks using the <code>CREATE DATABASE … TEMPLATE</code> clause.
+              </p>
+            </div>
+            <label className="block text-xs font-medium text-(--gh-fg-muted)">
+              Source Database URL
+              <input
+                type="url"
+                value={draftConfig.sourceDatabaseUrl}
+                onChange={(e) => onConfigChange({ sourceDatabaseUrl: e.target.value })}
+                className="mt-1.5 w-full rounded-md border border-(--gh-border-default) bg-(--gh-canvas-default) px-3 py-2 font-mono text-xs text-(--gh-fg-default)"
+                placeholder="postgresql://user:pass@localhost:5432/myproject"
+              />
+              <span className="mt-1 block text-[11px] text-(--gh-fg-muted)">
+                Must be an accessible PostgreSQL instance with permissions to CREATE DATABASE.
+              </span>
+            </label>
+
+            <div className="rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-default) p-3 text-xs text-(--gh-fg-muted)">
+              <p className="font-semibold text-(--gh-fg-default)">Ready to complete setup?</p>
+              <p className="mt-0.5">
+                Saving will store your preferences in localStorage and take you straight to your branch dashboard.
+              </p>
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStepIndex(2)}
+                className="rounded-lg border border-(--gh-border-default) px-3 py-1.5 text-xs text-(--gh-fg-muted) hover:text-(--gh-fg-default)"
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void onSave();
+                }}
+                className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-medium text-white hover:bg-emerald-500"
+              >
+                Finish Setup & Open Branches ✨
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-
-      {!isSignedIn ? (
-        <div className="mt-4 rounded-lg border border-(--gh-border-default) bg-(--gh-canvas-subtle) p-3">
-          <p className="text-sm text-(--gh-fg-muted)">
-            Sign in with GitHub to unlock branch actions.
-          </p>
-          <button
-            type="button"
-            onClick={onSignIn}
-            className="mt-2 rounded-lg bg-(--gh-accent-emphasis) px-3 py-2 text-sm text-white hover:brightness-110"
-          >
-            Sign in with GitHub
-          </button>
-        </div>
-      ) : null}
-
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="text-sm text-(--gh-fg-muted)">
-          Orchestrator URL
-          <input
-            type="text"
-            value={draftConfig.orchestratorUrl}
-            onChange={(event) => onConfigChange({ orchestratorUrl: event.target.value })}
-            className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
-            placeholder="http://localhost:3000"
-          />
-        </label>
-        <label className="text-sm text-(--gh-fg-muted)">
-          Environment
-          <input
-            type="text"
-            value={draftConfig.environment}
-            onChange={(event) => onConfigChange({ environment: event.target.value })}
-            className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
-            placeholder="local"
-          />
-        </label>
-        <label className="text-sm text-(--gh-fg-muted)">
-          Organization Slug
-          <input
-            type="text"
-            value={draftConfig.orgSlug}
-            onChange={(event) => onConfigChange({ orgSlug: event.target.value })}
-            className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
-            placeholder="acme"
-          />
-        </label>
-        <label className="text-sm text-(--gh-fg-muted)">
-          Project Slug
-          <input
-            type="text"
-            value={draftConfig.projectSlug}
-            onChange={(event) => onConfigChange({ projectSlug: event.target.value })}
-            className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
-            placeholder="flowdb"
-          />
-        </label>
-        <label className="text-sm text-(--gh-fg-muted) md:col-span-2">
-          Source Database URL
-          <input
-            type="url"
-            value={draftConfig.sourceDatabaseUrl}
-            onChange={(event) => onConfigChange({ sourceDatabaseUrl: event.target.value })}
-            className="mt-1 w-full rounded-md border border-(--gh-border-default) bg-transparent px-3 py-2 text-(--gh-fg-default)"
-            placeholder="postgresql://user:pass@host:5432/db"
-          />
-        </label>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => {
-          void onSave();
-        }}
-        className="mt-4 rounded-lg bg-(--gh-accent-emphasis) px-4 py-2 text-sm text-white hover:brightness-110"
-      >
-        Save and Continue
-      </button>
     </section>
   );
 }
@@ -727,6 +952,14 @@ export default function HomePage() {
     refetchInterval: 60000,
   });
 
+  const userProfileQuery = useQuery({
+    queryKey: queryKeys.userMe(config),
+    queryFn: () => api.users.me(config),
+    enabled: hasFlowDbToken,
+    retry: 1,
+    refetchInterval: 60000,
+  });
+
   useEffect(() => {
     const stored = readDashboardConfig();
     setConfig(stored);
@@ -759,7 +992,7 @@ export default function HomePage() {
       return;
     }
     const currentConfig = readDashboardConfig();
-    void api.users
+    api.users
       .sync(
         {
           githubLogin: session.user.githubLogin,
@@ -769,6 +1002,9 @@ export default function HomePage() {
         },
         currentConfig
       )
+      .then(() => {
+        void userProfileQuery.refetch();
+      })
       .catch(() => {
         // Non-fatal — orchestrator may not be reachable yet
       });
@@ -832,10 +1068,12 @@ export default function HomePage() {
 
   const isConnected = healthQuery.isSuccess && healthQuery.data.status === "ok";
 
-  const userName = session?.user?.name ?? "GitHub User";
-  const userAvatar = session?.user?.image ?? "";
-  const githubId = session?.user?.githubId ?? "";
-  const initials = userName
+  const userProfile = userProfileQuery.data;
+  const githubLogin = userProfile?.githubLogin || session?.user?.githubLogin || "";
+  const userName = userProfile?.displayName || session?.user?.name || (githubLogin ? `@${githubLogin}` : "GitHub User");
+  const userAvatar = userProfile?.avatarUrl || session?.user?.image || "";
+  const githubId = userProfile?.githubId || session?.user?.githubId || "";
+  const initials = (userProfile?.displayName || session?.user?.name || githubLogin || "GH")
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
@@ -1053,7 +1291,7 @@ export default function HomePage() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-(--gh-fg-default)">{userName}</p>
                 <p className="truncate text-xs text-(--gh-fg-muted)">
-                  {githubId ? `GitHub #${githubId}` : "Not signed in"}
+                  {githubLogin ? `@${githubLogin}` : githubId ? `GitHub #${githubId}` : "Not signed in"}
                 </p>
               </div>
             </div>
@@ -1119,9 +1357,23 @@ export default function HomePage() {
           <header className="mb-6 rounded-2xl border border-(--gh-border-default) bg-(--gh-canvas-default) p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="m-0 text-xl font-semibold text-(--gh-fg-default)">
-                  FlowDB Dashboard
-                </h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="m-0 text-xl font-semibold text-(--gh-fg-default)">
+                    FlowDB Dashboard
+                  </h1>
+                  {githubLogin && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-(--gh-border-default) bg-(--gh-canvas-subtle) px-2.5 py-0.5 text-xs font-medium text-(--gh-fg-muted)">
+                      {userAvatar && (
+                        <img
+                          src={userAvatar}
+                          alt={githubLogin}
+                          className="h-3.5 w-3.5 rounded-full object-cover"
+                        />
+                      )}
+                      @{githubLogin}
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 text-sm text-(--gh-fg-muted)">
                   Orchestrator: {config.orchestratorUrl}
                 </p>
